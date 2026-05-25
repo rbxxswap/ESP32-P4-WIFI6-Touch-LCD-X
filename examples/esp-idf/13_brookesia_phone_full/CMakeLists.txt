@@ -23,7 +23,15 @@ add_compile_options(
     -Wno-unused-but-set-variable
     -Wno-cast-function-type
     -Wno-ignored-qualifiers
+    -Wno-error=implicit-function-declaration
+    -Wno-error=incompatible-pointer-types
+    -Wno-error=int-conversion
 )
+
+# ESP-IDF v6.0 compatibility: relax warnings-as-errors globally for all components
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=implicit-function-declaration" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=incompatible-pointer-types" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=int-conversion" APPEND)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-enum-enum-conversion")
 
