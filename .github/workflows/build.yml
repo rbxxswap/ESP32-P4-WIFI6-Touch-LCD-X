@@ -1,0 +1,48 @@
+name: ESP-IDF Build
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build brookesia_phone_full for ESP32-P4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: ESP-IDF build (v6.0.1, esp32p4)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.1
+          target: esp32p4
+          path: examples/esp-idf/13_brookesia_phone_full
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32p4
+          path: |
+            examples/esp-idf/13_brookesia_phone_full/build/*.bin
+            examples/esp-idf/13_brookesia_phone_full/build/*.elf
+            examples/esp-idf/13_brookesia_phone_full/build/bootloader/bootloader.bin
+            examples/esp-idf/13_brookesia_phone_full/build/partition_table/partition-table.bin
+            examples/esp-idf/13_brookesia_phone_full/build/flasher_args.json
+          if-no-files-found: warn
+
+      - name: Attach binaries to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            examples/esp-idf/13_brookesia_phone_full/build/13_brookesia_phone_full.bin
+            examples/esp-idf/13_brookesia_phone_full/build/bootloader/bootloader.bin
+            examples/esp-idf/13_brookesia_phone_full/build/partition_table/partition-table.bin
+            examples/esp-idf/13_brookesia_phone_full/build/flasher_args.json
