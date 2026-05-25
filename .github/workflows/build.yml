@@ -1,4 +1,4 @@
-name: ESP-IDF Build
+﻿name: ESP-IDF Build
 
 on:
   push:
@@ -17,6 +17,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Cache ccache + managed_components
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            ~/.cache/ccache
+            examples/esp-idf/13_brookesia_phone_full/managed_components
+            examples/esp-idf/13_brookesia_phone_full/dependencies.lock
+          key: esp32p4-${{ runner.os }}-${{ hashFiles('examples/esp-idf/13_brookesia_phone_full/main/idf_component.yml', 'examples/esp-idf/13_brookesia_phone_full/CMakeLists.txt', 'examples/esp-idf/13_brookesia_phone_full/sdkconfig.defaults') }}
+          restore-keys: |
+            esp32p4-${{ runner.os }}-
 
       - name: ESP-IDF build (v6.0.1, esp32p4)
         uses: espressif/esp-idf-ci-action@v1
