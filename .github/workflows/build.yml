@@ -30,10 +30,10 @@ jobs:
           restore-keys: |
             esp32p4-${{ runner.os }}-
 
-      - name: ESP-IDF build (v6.0.1, esp32p4)
+      - name: ESP-IDF build (v5.5.3, esp32p4)
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v6.0.1
+          esp_idf_version: v5.5.3
           target: esp32p4
           path: examples/esp-idf/13_brookesia_phone_full
 
