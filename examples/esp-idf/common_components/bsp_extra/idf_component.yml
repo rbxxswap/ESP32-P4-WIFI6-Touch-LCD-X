@@ -1,9 +1,8 @@
-dependencies:
+﻿dependencies:
   idf:
     version: '>=5.5.3'
 
-  espressif/esp32_p4_function_ev_board_noglib:
-    version: "5.2.*"
+  waveshare/esp32_p4_wifi6_touch_lcd_x: "*"
 
   chmorgan/esp-audio-player:
     version: "1.0.*"
