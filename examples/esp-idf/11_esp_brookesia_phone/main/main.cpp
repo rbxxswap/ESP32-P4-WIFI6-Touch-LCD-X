@@ -149,19 +149,19 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
             .detach();
     }
 
-    /* Phase 1: WiFi + OTA-Check in Background-Task (blocking calls, daher detached) */
+    /* Phase 1: WiFi connecten + OTA periodisch initialisieren (Background-Task) */
     {
         esp_utils::thread_config_guard thread_config({
             .name = "wifi_ota",
             .stack_size = 8192,
         });
         boost::thread([]() {
-            ESP_UTILS_LOGI("WiFi Helper start, Firmware v%s", ota_updater_get_current_version());
+            ESP_UTILS_LOGI("WiFi+OTA Bootstrap, FW v%s", ota_updater_get_current_version());
             if (wifi_helper_start_blocking() == ESP_OK) {
-                ESP_UTILS_LOGI("WiFi connected, checking OTA");
-                ota_updater_check_and_update();
+                ESP_UTILS_LOGI("WiFi connected, init OTA from NVS");
+                ota_updater_init_from_nvs();
             } else {
-                ESP_UTILS_LOGW("WiFi connect failed, skipping OTA check");
+                ESP_UTILS_LOGW("WiFi connect failed, no OTA");
             }
         }).detach();
     }
