@@ -2,7 +2,8 @@
   idf:
     version: '>=5.5.3'
 
-  waveshare/esp32_p4_wifi6_touch_lcd_x: "*"
+  espressif/esp32_p4_function_ev_board_noglib:
+    version: "5.2.*"
 
   chmorgan/esp-audio-player:
     version: "1.0.*"

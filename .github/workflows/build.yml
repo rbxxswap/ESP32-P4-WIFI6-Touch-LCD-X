@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Build brookesia_phone_full for ESP32-P4
+    name: Build esp_brookesia_phone (Waveshare LCD-X) for ESP32-P4
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,9 +24,9 @@ jobs:
           path: |
             ~/.ccache
             ~/.cache/ccache
-            examples/esp-idf/13_brookesia_phone_full/managed_components
-            examples/esp-idf/13_brookesia_phone_full/dependencies.lock
-          key: esp32p4-${{ runner.os }}-${{ hashFiles('examples/esp-idf/13_brookesia_phone_full/main/idf_component.yml', 'examples/esp-idf/13_brookesia_phone_full/CMakeLists.txt', 'examples/esp-idf/13_brookesia_phone_full/sdkconfig.defaults') }}
+            examples/esp-idf/11_esp_brookesia_phone/managed_components
+            examples/esp-idf/11_esp_brookesia_phone/dependencies.lock
+          key: esp32p4-${{ runner.os }}-${{ hashFiles('examples/esp-idf/11_esp_brookesia_phone/main/idf_component.yml', 'examples/esp-idf/11_esp_brookesia_phone/CMakeLists.txt', 'examples/esp-idf/11_esp_brookesia_phone/sdkconfig.defaults') }}
           restore-keys: |
             esp32p4-${{ runner.os }}-
 
@@ -35,18 +35,18 @@ jobs:
         with:
           esp_idf_version: v5.5.3
           target: esp32p4
-          path: examples/esp-idf/13_brookesia_phone_full
+          path: examples/esp-idf/11_esp_brookesia_phone
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware-esp32p4
           path: |
-            examples/esp-idf/13_brookesia_phone_full/build/*.bin
-            examples/esp-idf/13_brookesia_phone_full/build/*.elf
-            examples/esp-idf/13_brookesia_phone_full/build/bootloader/bootloader.bin
-            examples/esp-idf/13_brookesia_phone_full/build/partition_table/partition-table.bin
-            examples/esp-idf/13_brookesia_phone_full/build/flasher_args.json
+            examples/esp-idf/11_esp_brookesia_phone/build/*.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/*.elf
+            examples/esp-idf/11_esp_brookesia_phone/build/bootloader/bootloader.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/partition_table/partition-table.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/flasher_args.json
           if-no-files-found: warn
 
       - name: Attach binaries to GitHub Release
@@ -54,7 +54,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            examples/esp-idf/13_brookesia_phone_full/build/13_brookesia_phone_full.bin
-            examples/esp-idf/13_brookesia_phone_full/build/bootloader/bootloader.bin
-            examples/esp-idf/13_brookesia_phone_full/build/partition_table/partition-table.bin
-            examples/esp-idf/13_brookesia_phone_full/build/flasher_args.json
+            examples/esp-idf/11_esp_brookesia_phone/build/11_esp_brookesia_phone.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/bootloader/bootloader.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/partition_table/partition-table.bin
+            examples/esp-idf/11_esp_brookesia_phone/build/flasher_args.json
