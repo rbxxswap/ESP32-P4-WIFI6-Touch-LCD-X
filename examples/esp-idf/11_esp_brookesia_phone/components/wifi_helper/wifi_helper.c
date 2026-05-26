@@ -130,8 +130,12 @@ esp_err_t wifi_helper_start_blocking(void)
     }
 
     wifi_config_t wifi_cfg = {0};
-    strncpy((char *)wifi_cfg.sta.ssid, ssid, sizeof(wifi_cfg.sta.ssid) - 1);
-    strncpy((char *)wifi_cfg.sta.password, pass, sizeof(wifi_cfg.sta.password) - 1);
+    size_t slen = strlen(ssid);
+    if (slen >= sizeof(wifi_cfg.sta.ssid)) slen = sizeof(wifi_cfg.sta.ssid) - 1;
+    memcpy(wifi_cfg.sta.ssid, ssid, slen);
+    size_t plen = strlen(pass);
+    if (plen >= sizeof(wifi_cfg.sta.password)) plen = sizeof(wifi_cfg.sta.password) - 1;
+    memcpy(wifi_cfg.sta.password, pass, plen);
     wifi_cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
 
     s_retry = 0;
