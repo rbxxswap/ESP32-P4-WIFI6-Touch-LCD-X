@@ -1,0 +1,17 @@
+menu "OTA Updater"
+
+    config OTA_GH_OWNER
+        string "GitHub repository owner"
+        default "rbxxswap"
+
+    config OTA_GH_REPO
+        string "GitHub repository name"
+        default "ESP32-P4-WIFI6-Touch-LCD-X"
+
+    config OTA_ASSET_NAME
+        string "Release asset filename to download"
+        default "11_esp_brookesia_phone.bin"
+        help
+            Name of the firmware .bin attached to the GitHub Release.
+
+endmenu
