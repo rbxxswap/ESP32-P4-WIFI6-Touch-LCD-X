@@ -1,0 +1,25 @@
+menu "WiFi Helper"
+
+    config WIFI_HELPER_DEFAULT_SSID
+        string "Default SSID (fallback if NVS empty)"
+        default ""
+        help
+            Hardcoded SSID for first boot before settings-app has written NVS.
+            Leave empty to disable fallback (NVS-only).
+            DO NOT commit secrets - put them in sdkconfig.local (gitignored).
+
+    config WIFI_HELPER_DEFAULT_PASS
+        string "Default password (fallback if NVS empty)"
+        default ""
+
+    config WIFI_HELPER_MAX_RETRY
+        int "Connect retry count"
+        default 8
+        range 1 50
+
+    config WIFI_HELPER_CONNECT_TIMEOUT_SEC
+        int "Connect timeout (seconds)"
+        default 30
+        range 5 300
+
+endmenu

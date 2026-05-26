@@ -7,6 +7,10 @@
 #include "bsp/esp-bsp.h"
 #include "esp_brookesia.hpp"
 #include "boost/thread.hpp"
+extern "C" {
+#include "wifi_helper.h"
+#include "ota_updater.h"
+}
 #ifdef ESP_UTILS_LOG_TAG
 #undef ESP_UTILS_LOG_TAG
 #endif
@@ -143,5 +147,22 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
                 boost::this_thread::sleep_for(boost::chrono::seconds(5));
             } })
             .detach();
+    }
+
+    /* Phase 1: WiFi + OTA-Check in Background-Task (blocking calls, daher detached) */
+    {
+        esp_utils::thread_config_guard thread_config({
+            .name = "wifi_ota",
+            .stack_size = 8192,
+        });
+        boost::thread([]() {
+            ESP_UTILS_LOGI("WiFi Helper start, Firmware v%s", ota_updater_get_current_version());
+            if (wifi_helper_start_blocking() == ESP_OK) {
+                ESP_UTILS_LOGI("WiFi connected, checking OTA");
+                ota_updater_check_and_update();
+            } else {
+                ESP_UTILS_LOGW("WiFi connect failed, skipping OTA check");
+            }
+        }).detach();
     }
 }
