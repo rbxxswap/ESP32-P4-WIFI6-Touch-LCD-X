@@ -1,4 +1,4 @@
-﻿name: ESP-IDF Build
+name: ESP-IDF Build
 
 on:
   push:
@@ -30,18 +30,20 @@ jobs:
           restore-keys: |
             esp32p4-${{ runner.os }}-
 
-      - name: ESP-IDF build (v5.5.3, esp32p4)
+      - name: ESP-IDF build + merge (v5.5.3, esp32p4)
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.3
           target: esp32p4
           path: examples/esp-idf/11_esp_brookesia_phone
+          command: "idf.py build && idf.py merge-bin -o firmware-merged-esp32p4.bin"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware-esp32p4
           path: |
+            examples/esp-idf/11_esp_brookesia_phone/build/firmware-merged-esp32p4.bin
             examples/esp-idf/11_esp_brookesia_phone/build/*.bin
             examples/esp-idf/11_esp_brookesia_phone/build/*.elf
             examples/esp-idf/11_esp_brookesia_phone/build/bootloader/bootloader.bin
@@ -54,6 +56,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            examples/esp-idf/11_esp_brookesia_phone/build/firmware-merged-esp32p4.bin
             examples/esp-idf/11_esp_brookesia_phone/build/11_esp_brookesia_phone.bin
             examples/esp-idf/11_esp_brookesia_phone/build/bootloader/bootloader.bin
             examples/esp-idf/11_esp_brookesia_phone/build/partition_table/partition-table.bin

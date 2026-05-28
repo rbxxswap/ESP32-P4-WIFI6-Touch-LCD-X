@@ -151,23 +151,41 @@ cleanup:
 /*  NVS-Settings                                                             */
 /* ------------------------------------------------------------------------- */
 
+/* Default-Intervall abhaengig vom Build-Typ (aus App-Version / git describe):
+   - Version enthaelt "alpha"/"beta" oder einen "-" (= nicht exakt auf Release-Tag,
+     also Prerelease oder Dev-Build) -> 5 min (schnelle Test-Updates)
+   - sonst (sauberes Release-Tag wie "1.0.0") -> 24 h (sanft, gegen Update-Stampede)
+   Der in NVS gespeicherte User-Wert ueberschreibt diesen Default immer. */
+static int default_interval_from_version(void)
+{
+    const char *v = ota_updater_get_current_version();
+    if (strstr(v, "alpha") || strstr(v, "beta") || strchr(v, '-')) {
+        return 300;     /* prerelease / dev */
+    }
+    return 86400;       /* stable release */
+}
+
 static esp_err_t load_settings_nvs(void)
 {
+    int def_interval = default_interval_from_version();
     nvs_handle_t h;
     esp_err_t err = nvs_open(OTA_NVS_NS, NVS_READONLY, &h);
     if (err != ESP_OK) {
-        /* Namespace existiert noch nicht -> Defaults beibehalten */
+        /* Namespace existiert noch nicht -> version-basierte Defaults */
         s_enabled      = OTA_DEFAULT_ENABLED;
-        s_interval_sec = OTA_DEFAULT_INTERVAL;
+        s_interval_sec = def_interval;
+        ESP_LOGI(TAG, "Settings default: enabled=%d interval=%ds (v=%s)",
+                 (int)s_enabled, s_interval_sec, ota_updater_get_current_version());
         return ESP_OK;
     }
     uint8_t en = OTA_DEFAULT_ENABLED;
-    int32_t iv = OTA_DEFAULT_INTERVAL;
+    int32_t iv = 0;
     nvs_get_u8(h, OTA_NVS_KEY_ENABLED, &en);
-    nvs_get_i32(h, OTA_NVS_KEY_INTERVAL, &iv);
+    esp_err_t iv_err = nvs_get_i32(h, OTA_NVS_KEY_INTERVAL, &iv);
     nvs_close(h);
     s_enabled      = (en != 0);
-    s_interval_sec = (iv > 0 ? iv : OTA_DEFAULT_INTERVAL);
+    /* User-Wert nur nehmen wenn vorhanden + plausibel, sonst version-Default */
+    s_interval_sec = (iv_err == ESP_OK && iv > 0) ? iv : def_interval;
     ESP_LOGI(TAG, "Settings: enabled=%d interval=%ds", (int)s_enabled, s_interval_sec);
     return ESP_OK;
 }
