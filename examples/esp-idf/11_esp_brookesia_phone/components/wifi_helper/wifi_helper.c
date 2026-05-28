@@ -177,3 +177,64 @@ bool wifi_helper_is_connected(void)
 {
     return s_connected;
 }
+
+/* ------------------------------------------------------------------------- */
+/*  Scan + IP-Info (fuer Settings-App)                                       */
+/* ------------------------------------------------------------------------- */
+
+int wifi_helper_scan(wifi_scan_result_t *results, int max_results)
+{
+    if (!results || max_results <= 0) return -1;
+    if (!s_initialised) {
+        if (wifi_helper_init() != ESP_OK) return -1;
+    }
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();   /* idempotent wenn schon gestartet */
+
+    wifi_scan_config_t scan_cfg = { .show_hidden = false };
+    esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);  /* blocking */
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "scan_start failed: %s", esp_err_to_name(err));
+        return -1;
+    }
+
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    if (ap_count == 0) return 0;
+
+    wifi_ap_record_t *recs = calloc(ap_count, sizeof(wifi_ap_record_t));
+    if (!recs) return -1;
+    uint16_t fetch = ap_count;
+    esp_wifi_scan_get_ap_records(&fetch, recs);
+
+    int n = 0;
+    for (int i = 0; i < fetch && n < max_results; i++) {
+        const char *ssid = (const char *)recs[i].ssid;
+        if (strlen(ssid) == 0) continue;                 /* hidden ueberspringen */
+        bool dup = false;
+        for (int j = 0; j < n; j++) {
+            if (strcmp(results[j].ssid, ssid) == 0) { dup = true; break; }
+        }
+        if (dup) continue;
+        strncpy(results[n].ssid, ssid, sizeof(results[n].ssid) - 1);
+        results[n].ssid[sizeof(results[n].ssid) - 1] = 0;
+        results[n].rssi   = recs[i].rssi;
+        results[n].secure = (recs[i].authmode != WIFI_AUTH_OPEN);
+        n++;
+    }
+    free(recs);
+    ESP_LOGI(TAG, "Scan: %d APs gefunden, %d zurueckgegeben", ap_count, n);
+    return n;
+}
+
+void wifi_helper_get_ip(char *buf, int buf_size)
+{
+    if (!buf || buf_size < 16) return;
+    strcpy(buf, "0.0.0.0");
+    if (s_sta_netif && s_connected) {
+        esp_netif_ip_info_t ip;
+        if (esp_netif_get_ip_info(s_sta_netif, &ip) == ESP_OK) {
+            snprintf(buf, buf_size, IPSTR, IP2STR(&ip.ip));
+        }
+    }
+}

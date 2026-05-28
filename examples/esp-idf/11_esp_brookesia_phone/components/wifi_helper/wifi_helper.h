@@ -38,6 +38,29 @@ esp_err_t wifi_helper_store_credentials(const char *ssid, const char *pass);
 
 bool wifi_helper_is_connected(void);
 
+/**
+ * Ein Scan-Ergebnis (ein gefundenes WiFi-Netz).
+ */
+typedef struct {
+    char    ssid[33];
+    int8_t  rssi;       /* Signalstaerke in dBm (negativ, naeher an 0 = besser) */
+    bool    secure;     /* true wenn verschluesselt (nicht OPEN) */
+} wifi_scan_result_t;
+
+/**
+ * Blockierender WiFi-Scan. Stellt sicher dass WiFi im STA-Modus laeuft.
+ * Fuellt results[] mit bis zu max_results Netzen (nach RSSI sortiert von esp_wifi).
+ *
+ * @return Anzahl gefundener Netze (>=0), oder negativ bei Fehler.
+ */
+int wifi_helper_scan(wifi_scan_result_t *results, int max_results);
+
+/**
+ * Aktuelle IP als String ("0.0.0.0" wenn nicht verbunden).
+ * Schreibt in buf (mind. 16 Bytes).
+ */
+void wifi_helper_get_ip(char *buf, int buf_size);
+
 #ifdef __cplusplus
 }
 #endif
