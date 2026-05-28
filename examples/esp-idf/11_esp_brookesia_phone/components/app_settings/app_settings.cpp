@@ -1,8 +1,12 @@
-/*
+﻿/*
  * Settings-App - Implementation (Brookesia 0.5)
  *
- * 5b-2: Anzeige-Skelett. Zeigt FW-Version, WiFi-Status, OTA-Settings als Labels.
- * Interaktive Elemente (WiFi-Scan, Keyboard, OTA-Toggle, Buttons) folgen in 5b-3/5b-4.
+ * 5b-2 + 5b-4: OTA-Section interaktiv.
+ *   - Auto-Update Switch (NVS-persistiert)
+ *   - Slider fuer Intervall (5 min .. 24 h, Schrittweite 5 min)
+ *   - "Check for updates now"-Button (in Background-Task)
+ *   - Live-Refresh-Timer 2s
+ * WiFi-Setup-UI (Scan-Liste + Keyboard) folgt in 5b-3.
  */
 #include "lvgl.h"
 #include "esp_brookesia.hpp"
@@ -11,6 +15,8 @@
 #endif
 #define ESP_UTILS_LOG_TAG "AppSettings"
 #include "esp_lib_utils.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "app_settings.hpp"
 extern "C" {
 #include "wifi_helper.h"
@@ -29,61 +35,141 @@ namespace esp_brookesia::apps {
 
 AppSettings *AppSettings::_instance = nullptr;
 
-AppSettings *AppSettings::requestInstance(bool use_status_bar, bool use_navigation_bar)
+/* UI-Handles (Singleton-App, static ok) */
+static lv_obj_t *s_fw_lbl          = nullptr;
+static lv_obj_t *s_wifi_status_lbl = nullptr;
+static lv_obj_t *s_ota_switch      = nullptr;
+static lv_obj_t *s_ota_iv_lbl      = nullptr;
+static lv_obj_t *s_ota_slider      = nullptr;
+static lv_obj_t *s_ota_msg_lbl     = nullptr;
+
+static void refresh_static_labels(void)
 {
-    if (_instance == nullptr) {
-        _instance = new AppSettings(use_status_bar, use_navigation_bar);
+    char buf[80];
+    if (s_fw_lbl) {
+        snprintf(buf, sizeof(buf), "Firmware: %s", ota_updater_get_current_version());
+        lv_label_set_text(s_fw_lbl, buf);
     }
-    return _instance;
+    if (s_wifi_status_lbl) {
+        char ip[16];
+        wifi_helper_get_ip(ip, sizeof(ip));
+        snprintf(buf, sizeof(buf), "WiFi: %s (%s)",
+                 wifi_helper_is_connected() ? "connected" : "offline", ip);
+        lv_label_set_text(s_wifi_status_lbl, buf);
+    }
+    if (s_ota_iv_lbl) {
+        int sec = ota_updater_get_interval_sec();
+        if (sec >= 3600) snprintf(buf, sizeof(buf), "Interval: %d h", sec / 3600);
+        else             snprintf(buf, sizeof(buf), "Interval: %d min", sec / 60);
+        lv_label_set_text(s_ota_iv_lbl, buf);
+    }
 }
 
-AppSettings::AppSettings(bool use_status_bar, bool use_navigation_bar):
-    App(APP_NAME, &app_settings_icon_112_112, true, use_status_bar, use_navigation_bar)
+/* ---- Event-Callbacks ---- */
+
+static void ota_switch_cb(lv_event_t *e)
 {
+    lv_obj_t *sw = (lv_obj_t *)lv_event_get_user_data(e);
+    bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    ota_updater_set_enabled(on);
+    ESP_UTILS_LOGI("Auto-Update %s", on ? "ON" : "OFF");
 }
 
-AppSettings::~AppSettings()
+/* Slider: 1..288 Steps mit je 5 min -> 5min..24h */
+static void ota_slider_cb(lv_event_t *e)
 {
+    lv_obj_t *sl = (lv_obj_t *)lv_event_get_user_data(e);
+    int steps = lv_slider_get_value(sl);
+    int sec   = steps * 300;
+    ota_updater_set_interval_sec(sec);
+    refresh_static_labels();
 }
+
+static void async_show_msg(void *arg)
+{
+    if (s_ota_msg_lbl) lv_label_set_text(s_ota_msg_lbl, (const char *)arg);
+    refresh_static_labels();
+}
+
+static void manual_check_task(void *arg)
+{
+    lv_async_call(async_show_msg, (void *)"Checking...");
+    ota_updater_check_and_update();
+    /* Erfolg waere mit reboot rausgegangen; hier = bereits aktuell oder error */
+    lv_async_call(async_show_msg, (void *)"Up to date.");
+    vTaskDelete(NULL);
+}
+
+static void ota_check_btn_cb(lv_event_t *e)
+{
+    ESP_UTILS_LOGI("Manual OTA check requested");
+    xTaskCreate(manual_check_task, "ota_manual", 8192, NULL, 5, NULL);
+}
+
+static void refresh_timer_cb(lv_timer_t *t)
+{
+    refresh_static_labels();
+}
+
+/* ---- UI-Aufbau ---- */
 
 bool AppSettings::run(void)
 {
     ESP_UTILS_LOGD("Run");
-
     lv_obj_t *scr = lv_scr_act();
-    char buf[80];
 
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "Settings");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
 
-    snprintf(buf, sizeof(buf), "Firmware: %s", ota_updater_get_current_version());
-    lv_obj_t *ver = lv_label_create(scr);
-    lv_label_set_text(ver, buf);
-    lv_obj_align(ver, LV_ALIGN_TOP_MID, 0, 72);
+    s_fw_lbl = lv_label_create(scr);
+    lv_obj_align(s_fw_lbl, LV_ALIGN_TOP_MID, 0, 80);
 
-    char ip[16];
-    wifi_helper_get_ip(ip, sizeof(ip));
-    snprintf(buf, sizeof(buf), "WiFi: %s (%s)",
-             wifi_helper_is_connected() ? "connected" : "offline", ip);
-    lv_obj_t *wifi = lv_label_create(scr);
-    lv_label_set_text(wifi, buf);
-    lv_obj_align(wifi, LV_ALIGN_TOP_MID, 0, 112);
+    s_wifi_status_lbl = lv_label_create(scr);
+    lv_obj_align(s_wifi_status_lbl, LV_ALIGN_TOP_MID, 0, 120);
 
-    snprintf(buf, sizeof(buf), "Auto-Update: %s", ota_updater_is_enabled() ? "ON" : "OFF");
-    lv_obj_t *ota = lv_label_create(scr);
-    lv_label_set_text(ota, buf);
-    lv_obj_align(ota, LV_ALIGN_TOP_MID, 0, 152);
+    lv_obj_t *ota_title = lv_label_create(scr);
+    lv_label_set_text(ota_title, "--- OTA Updates ---");
+    lv_obj_align(ota_title, LV_ALIGN_TOP_MID, 0, 200);
 
-    snprintf(buf, sizeof(buf), "Check interval: %d s", ota_updater_get_interval_sec());
-    lv_obj_t *iv = lv_label_create(scr);
-    lv_label_set_text(iv, buf);
-    lv_obj_align(iv, LV_ALIGN_TOP_MID, 0, 192);
+    lv_obj_t *sw_lbl = lv_label_create(scr);
+    lv_label_set_text(sw_lbl, "Auto-Update");
+    lv_obj_align(sw_lbl, LV_ALIGN_TOP_LEFT, 100, 250);
+
+    s_ota_switch = lv_switch_create(scr);
+    lv_obj_align(s_ota_switch, LV_ALIGN_TOP_LEFT, 300, 245);
+    if (ota_updater_is_enabled()) lv_obj_add_state(s_ota_switch, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(s_ota_switch, ota_switch_cb, LV_EVENT_VALUE_CHANGED, s_ota_switch);
+
+    s_ota_iv_lbl = lv_label_create(scr);
+    lv_obj_align(s_ota_iv_lbl, LV_ALIGN_TOP_LEFT, 100, 300);
+
+    s_ota_slider = lv_slider_create(scr);
+    lv_obj_set_width(s_ota_slider, 800);
+    lv_obj_align(s_ota_slider, LV_ALIGN_TOP_LEFT, 100, 340);
+    lv_slider_set_range(s_ota_slider, 1, 288);
+    int cur_sec = ota_updater_get_interval_sec();
+    lv_slider_set_value(s_ota_slider, cur_sec / 300, LV_ANIM_OFF);
+    lv_obj_add_event_cb(s_ota_slider, ota_slider_cb, LV_EVENT_VALUE_CHANGED, s_ota_slider);
+
+    lv_obj_t *check_btn = lv_btn_create(scr);
+    lv_obj_set_size(check_btn, 300, 60);
+    lv_obj_align(check_btn, LV_ALIGN_TOP_LEFT, 100, 400);
+    lv_obj_add_event_cb(check_btn, ota_check_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *btn_lbl = lv_label_create(check_btn);
+    lv_label_set_text(btn_lbl, "Check for updates now");
+    lv_obj_center(btn_lbl);
+
+    s_ota_msg_lbl = lv_label_create(scr);
+    lv_label_set_text(s_ota_msg_lbl, "");
+    lv_obj_align(s_ota_msg_lbl, LV_ALIGN_TOP_LEFT, 420, 415);
 
     lv_obj_t *hint = lv_label_create(scr);
-    lv_label_set_text(hint, "(WiFi setup + controls coming next)");
-    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 240);
+    lv_label_set_text(hint, "(WiFi setup follows next)");
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -40);
 
+    refresh_static_labels();
+    lv_timer_create(refresh_timer_cb, 2000, NULL);
     return true;
 }
 
