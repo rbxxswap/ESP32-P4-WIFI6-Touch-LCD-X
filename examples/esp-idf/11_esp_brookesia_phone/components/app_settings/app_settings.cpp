@@ -35,6 +35,23 @@ namespace esp_brookesia::apps {
 
 AppSettings *AppSettings::_instance = nullptr;
 
+AppSettings *AppSettings::requestInstance(bool use_status_bar, bool use_navigation_bar)
+{
+    if (_instance == nullptr) {
+        _instance = new AppSettings(use_status_bar, use_navigation_bar);
+    }
+    return _instance;
+}
+
+AppSettings::AppSettings(bool use_status_bar, bool use_navigation_bar):
+    App(APP_NAME, &app_settings_icon_112_112, true, use_status_bar, use_navigation_bar)
+{
+}
+
+AppSettings::~AppSettings()
+{
+}
+
 /* UI-Handles (Singleton-App, static ok) */
 static lv_obj_t *s_fw_lbl          = nullptr;
 static lv_obj_t *s_wifi_status_lbl = nullptr;
