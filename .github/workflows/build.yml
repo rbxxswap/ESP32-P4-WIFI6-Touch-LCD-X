@@ -3,9 +3,8 @@ name: ESP-IDF Build
 on:
   push:
     branches: [main, "feature/**"]
+    tags: ['v*']
   pull_request:
-  release:
-    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -54,9 +53,11 @@ jobs:
           if-no-files-found: warn
 
       - name: Attach binaries to GitHub Release
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
           files: |
             examples/esp-idf/11_esp_brookesia_phone/build/firmware-merged-esp32p4.bin
             examples/esp-idf/11_esp_brookesia_phone/build/11_esp_brookesia_phone.bin
