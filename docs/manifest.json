@@ -7,7 +7,7 @@
       "chipFamily": "ESP32-P4",
       "parts": [
         {
-          "path": "https://github.com/rbxxswap/ESP32-P4-WIFI6-Touch-LCD-X/releases/download/v0.1.0-alpha.1/firmware-merged-esp32p4.bin",
+          "path": "./firmware-merged-esp32p4.bin",
           "offset": 0
         }
       ]
