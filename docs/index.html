@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ESP32-P4-WIFI6-Touch-LCD-X &mdash; Web Flasher</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+      line-height: 1.55;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .sub { color: #666; margin-top: 0; font-size: 0.95rem; }
+    code {
+      background: rgba(127,127,127,0.18);
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }    .flash-box {
+      margin: 2rem 0;
+      padding: 1.5rem;
+      border: 1px solid rgba(127,127,127,0.35);
+      border-radius: 10px;
+      text-align: center;
+    }
+    ol, ul { padding-left: 1.3rem; }
+    li { margin: 0.35rem 0; }
+    .note {
+      background: rgba(255,193,7,0.14);
+      border-left: 4px solid #ffc107;
+      padding: 0.8rem 1rem;
+      border-radius: 6px;
+      margin: 1.5rem 0;
+      font-size: 0.92rem;
+    }
+    a { color: #2563eb; }
+    .unsupported { color: #c0392b; font-weight: 600; }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: #888;
+      border-top: 1px solid rgba(127,127,127,0.25);
+      padding-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>ESP32-P4-WIFI6-Touch-LCD-X Web Flasher</h1>
+  <p class="sub">Smart Display firmware &mdash; flash directly from your browser, no local tools required.</p>
+
+  <div class="flash-box">
+    <esp-web-install-button manifest="./manifest.json">
+      <span slot="unsupported" class="unsupported">
+        Your browser is not supported. Use Chrome, Edge or Opera on desktop.
+      </span>
+      <span slot="not-allowed" class="unsupported">
+        This page must be served over HTTPS to flash.
+      </span>
+    </esp-web-install-button>
+    <p style="margin:0.75rem 0 0; font-size:0.85rem; color:#888;">
+      Version <code>v0.1.0-alpha.1</code> &middot; pre-release
+    </p>
+  </div>
+
+  <h2 style="font-size:1.1rem;">Before you start</h2>
+  <ol>
+    <li>Use a <strong>Chromium-based desktop browser</strong> (Chrome, Edge, Opera). Firefox, Safari and all mobile browsers lack the Web Serial API and cannot flash.</li>
+    <li>Connect the board to your computer with a USB-C data cable (not charge-only).</li>
+    <li>Click <strong>Connect</strong>, pick the serial port for the board, then follow the prompts.</li>
+    <li>On first install, choose <strong>Erase device</strong> when offered &mdash; this writes a clean image.</li>
+  </ol>
+
+  <div class="note">
+    <strong>Pre-release / alpha.</strong> This is an early build for testing the display,
+    touch, launcher and Wi-Fi setup. Expect rough edges. Flashing replaces any firmware
+    currently on the device.
+  </div>
+
+  <h2 style="font-size:1.1rem;">What gets flashed</h2>
+  <p>
+    A single merged image (<code>firmware-merged-esp32p4.bin</code>, ~3.7&nbsp;MB) written at
+    offset <code>0x0</code> &mdash; it contains the bootloader, partition table and application.
+  </p>
+
+  <footer>
+    Source &amp; releases:
+    <a href="https://github.com/rbxxswap/ESP32-P4-WIFI6-Touch-LCD-X" target="_blank" rel="noopener">github.com/rbxxswap/ESP32-P4-WIFI6-Touch-LCD-X</a><br />
+    Flasher powered by
+    <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>.
+  </footer>
+</body>
+</html>
