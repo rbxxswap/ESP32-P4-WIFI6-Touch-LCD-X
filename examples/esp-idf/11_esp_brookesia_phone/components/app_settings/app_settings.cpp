@@ -18,6 +18,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "app_settings.hpp"
+#include "app_settings_wifi.h"
 extern "C" {
 #include "wifi_helper.h"
 #include "ota_updater.h"
@@ -133,10 +134,14 @@ static void refresh_timer_cb(lv_timer_t *t)
 bool AppSettings::run(void)
 {
     ESP_UTILS_LOGD("Run");
-    lv_obj_t *scr = lv_scr_act();
+    lv_obj_t *root = lv_scr_act();
+    lv_obj_t *tv = lv_tabview_create(root);
+    lv_obj_t *tab_wifi = lv_tabview_add_tab(tv, "WiFi");
+    lv_obj_t *scr = lv_tabview_add_tab(tv, "Updates");
+    app_settings_wifi_section_create(tab_wifi);
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Settings");
+    lv_label_set_text(title, "Updates");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
 
     s_fw_lbl = lv_label_create(scr);
