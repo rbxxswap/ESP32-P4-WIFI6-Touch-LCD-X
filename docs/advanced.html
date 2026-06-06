@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Advanced Flashing &mdash; ESP32-P4-WIFI6-Touch-LCD-X</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 4rem; line-height: 1.55;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.1rem; margin-top: 2.2rem; }
+    .sub { color: #888; margin-top: 0; font-size: 0.95rem; }
+    code { background: rgba(127,127,127,0.18); padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    a { color: #2563eb; }
+    .card {
+      margin: 1rem 0 0; padding: 1.25rem; border: 1px solid rgba(127,127,127,0.35); border-radius: 10px;
+    }
+    label { display: block; font-size: 0.9rem; margin: 0.75rem 0 0.25rem; font-weight: 600; }
+    select, input[type=text], input[type=file] {
+      width: 100%; box-sizing: border-box; padding: 0.5rem; font-size: 0.95rem;
+      border: 1px solid rgba(127,127,127,0.4); border-radius: 6px; background: transparent; color: inherit;
+    }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; }
+    .row > div { flex: 1; min-width: 140px; }
+    button {
+      margin-top: 1rem; padding: 0.6rem 1.1rem; font-size: 0.95rem; font-weight: 600;
+      border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .note {
+      background: rgba(255,193,7,0.14); border-left: 4px solid #ffc107;
+      padding: 0.7rem 0.9rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem;
+    }
+    .danger { background: rgba(231,76,60,0.13); border-left-color: #e74c3c; }
+    .chip { font-size: 0.9rem; color: #16a34a; font-weight: 600; }
+    .checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.9rem; }
+    .checkbox-row input { width: auto; }
+    .checkbox-row label { margin: 0; font-weight: 400; }
+    progress { width: 100%; height: 14px; margin-top: 1rem; }
+    pre#log {
+      margin-top: 1rem; background: rgba(127,127,127,0.12); padding: 0.75rem; border-radius: 6px;
+      font-size: 0.8rem; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    }
+    .hidden { display: none; }
+    .unsupported { color: #c0392b; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <p style="margin:0 0 0.5rem;"><a href="./index.html">&larr; Back to main</a></p>
+  <h1>Advanced Flashing</h1>
+  <p class="sub">Pick any released version (including pre-releases) or flash your own binary.</p>
+
+  <div class="note">
+    Requires a <strong>Chromium-based desktop browser</strong> (Chrome, Edge, Opera) and a
+    USB-C data cable. Web Serial is unavailable in Firefox, Safari and on mobile.
+  </div>
+
+  <h2>1. Flash a specific version</h2>
+  <div class="card">
+    <label for="version-select">Released version</label>
+    <select id="version-select"><option>Loading&hellip;</option></select>
+    <div style="margin-top:1rem;">
+      <esp-web-install-button id="version-install">
+        <span slot="unsupported" class="unsupported">Browser not supported.</span>
+        <span slot="not-allowed" class="unsupported">HTTPS required.</span>
+      </esp-web-install-button>
+    </div>
+    <p id="version-meta" style="font-size:0.85rem; color:#888; margin:0.75rem 0 0;"></p>
+  </div>
+
+  <h2>2. Flash your own binary</h2>
+  <div class="card">
+    <div class="note danger">
+      Flashing a wrong file or offset can leave the device unbootable. For a full image use
+      offset <code>0x0</code>. You can recover any time by flashing a known-good version above.
+    </div>
+
+    <button id="connect-btn">Connect device</button>
+    <p id="chip-info" class="chip"></p>
+
+    <div id="flash-controls" class="hidden">
+      <label for="file-input">Firmware file (.bin)</label>
+      <input type="file" id="file-input" accept=".bin" />
+
+      <label for="offset-input">Flash offset (hex, e.g. <code>0x0</code> for a full image)</label>
+      <input type="text" id="offset-input" value="0x0" />
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="erase-all" />
+        <label for="erase-all">Erase entire flash before writing</label>
+      </div>
+
+      <button id="flash-btn" disabled>Flash binary</button>
+      <progress id="prog" class="hidden" max="100" value="0"></progress>
+    </div>
+
+    <pre id="log" class="hidden"></pre>
+  </div>
+
+  <script type="module">
+    import { ESPLoader, Transport } from "https://cdn.jsdelivr.net/npm/esptool-js@0.6.0/+esm";
+
+    const FLASH_BAUD = 460800;
+
+    // ---- Part A: version selector ----
+    const sel = document.getElementById('version-select');
+    const vInstall = document.getElementById('version-install');
+    const vMeta = document.getElementById('version-meta');
+    const fmtDate = s => { try { return new Date(s).toISOString().slice(0,10); } catch { return ''; } };
+
+    (async () => {
+      try {
+        const versions = await (await fetch('./versions.json', {cache:'no-store'})).json();
+        if (!versions.length) { sel.innerHTML = '<option>No releases found</option>'; return; }
+        sel.innerHTML = '';
+        versions.forEach((v, i) => {
+          const o = document.createElement('option');
+          o.value = i;
+          o.textContent = v.tag + (v.prerelease ? '  (pre-release)' : '');
+          sel.appendChild(o);
+        });
+        const apply = () => {
+          const v = versions[sel.value];
+          vInstall.setAttribute('manifest', v.manifest);
+          vMeta.textContent = (v.prerelease ? 'Pre-release' : 'Stable') +
+            (v.published ? ' \u00b7 ' + fmtDate(v.published) : '');
+        };
+        sel.addEventListener('change', apply);
+        apply();
+      } catch (e) {
+        sel.innerHTML = '<option>Failed to load versions</option>';
+      }
+    })();
+
+    // ---- Part B: custom binary flasher (esptool-js) ----
+    const connectBtn = document.getElementById('connect-btn');
+    const chipInfo = document.getElementById('chip-info');
+    const controls = document.getElementById('flash-controls');
+    const fileInput = document.getElementById('file-input');
+    const offsetInput = document.getElementById('offset-input');
+    const eraseAll = document.getElementById('erase-all');
+    const flashBtn = document.getElementById('flash-btn');
+    const prog = document.getElementById('prog');
+    const logEl = document.getElementById('log');
+
+    let esploader = null, transport = null, device = null;
+    const log = m => { logEl.classList.remove('hidden'); logEl.textContent += m + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+    const term = {
+      clean(){ logEl.textContent = ''; },
+      writeLine(d){ log(d); },
+      write(d){ logEl.classList.remove('hidden'); logEl.textContent += d; logEl.scrollTop = logEl.scrollHeight; }
+    };
+
+    if (!('serial' in navigator)) {
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Web Serial not supported in this browser';
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      try {
+        device = await navigator.serial.requestPort();
+        transport = new Transport(device, true);
+        esploader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: 115200, terminal: term });
+        connectBtn.disabled = true; connectBtn.textContent = 'Connecting\u2026';
+        const chip = await esploader.main();
+        chipInfo.textContent = 'Connected: ' + chip;
+        controls.classList.remove('hidden');
+        flashBtn.disabled = false;
+        connectBtn.textContent = 'Connected';
+      } catch (e) {
+        log('Connect failed: ' + (e.message || e));
+        connectBtn.disabled = false; connectBtn.textContent = 'Connect device';
+      }
+    });
+
+    const readAsBinaryString = file => new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(r.error);
+      r.readAsBinaryString(file);
+    });
+
+    flashBtn.addEventListener('click', async () => {
+      if (!esploader) return;
+      const file = fileInput.files[0];
+      if (!file) { log('Pick a .bin file first.'); return; }
+      const raw = offsetInput.value.trim();
+      const offset = parseInt(raw, raw.toLowerCase().startsWith('0x') ? 16 : 10);
+      if (Number.isNaN(offset)) { log('Bad offset: ' + raw); return; }
+
+      flashBtn.disabled = true; connectBtn.disabled = true;
+      prog.classList.remove('hidden'); prog.value = 0;
+      try {
+        const data = await readAsBinaryString(file);
+        log('Flashing ' + file.name + ' (' + data.length + ' bytes) at 0x' + offset.toString(16) + ' \u2026');
+        await esploader.writeFlash({
+          fileArray: [{ data, address: offset }],
+          flashSize: 'keep',
+          eraseAll: eraseAll.checked,
+          compress: true,
+          reportProgress: (idx, written, total) => { prog.value = Math.round(written / total * 100); }
+        });
+        log('Write done. Resetting device \u2026');
+        await esploader.after('hard_reset');
+        log('Flash complete. You can disconnect the board.');
+      } catch (e) {
+        log('Flash failed: ' + (e.message || e));
+      } finally {
+        flashBtn.disabled = false; connectBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

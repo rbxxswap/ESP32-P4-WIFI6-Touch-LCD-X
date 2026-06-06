@@ -10,11 +10,6 @@ on:
     workflows: ["ESP-IDF Build"]
     types: [completed]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to publish (blank = newest release incl. prereleases)'
-        required: false
-        default: ''
 
 permissions:
   contents: read
@@ -25,10 +20,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  MAX_RELEASES: "20"
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Skip needless runs: only deploy on successful builds, page edits, or manual dispatch
     if: >-
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
@@ -36,57 +33,59 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout (docs + manifest from main)
+      - name: Checkout (docs from main)
         uses: actions/checkout@v4
 
-      - name: Resolve release tag
-        id: tag
+      - name: Stage site (docs + all release firmwares + versions.json)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')
-          fi
-          if [ -z "$TAG" ]; then
-            echo "No release found - nothing to publish."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-            echo "Publishing firmware from release: $TAG"
-          fi
-
-      - name: Stage site (docs + firmware + version stamp)
-        if: steps.tag.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           mkdir -p _site
           cp -r docs/. _site/
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'firmware-merged-esp32p4.bin' \
-            --dir _site \
-            --clobber
-          tmp=$(mktemp)
-          jq --arg v "$TAG" '.version=$v' _site/manifest.json > "$tmp"
-          mv "$tmp" _site/manifest.json
-          echo "---- _site contents ----"
-          ls -la _site
-          echo "---- manifest ----"
-          cat _site/manifest.json
+          mkdir -p _site/fw
+          echo "[]" > _site/versions.json
+
+          gh release list --repo "$GITHUB_REPOSITORY" --limit "$MAX_RELEASES" \
+            --json tagName,isPrerelease,name,publishedAt > releases.json
+          echo "Releases found (capped at $MAX_RELEASES): $(jq length releases.json)"
+
+          count=$(jq length releases.json)
+          for i in $(seq 0 $((count - 1))); do
+            tag=$(jq -r ".[$i].tagName" releases.json)
+            pre=$(jq -r ".[$i].isPrerelease" releases.json)
+            name=$(jq -r ".[$i].name // .[$i].tagName" releases.json)
+            pub=$(jq -r ".[$i].publishedAt" releases.json)
+            mkdir -p "_site/fw/$tag"
+            if gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+                 --pattern 'firmware-merged-esp32p4.bin' \
+                 --dir "_site/fw/$tag" --clobber 2>/dev/null; then
+              jq -n --arg v "$tag" '{
+                name: "ESP32-P4-WIFI6-Touch-LCD-X Smart Display",
+                version: $v,
+                new_install_prompt_erase: true,
+                builds: [ { chipFamily: "ESP32-P4",
+                  parts: [ { path: "./firmware-merged-esp32p4.bin", offset: 0 } ] } ]
+              }' > "_site/fw/$tag/manifest.json"
+              tmp=$(mktemp)
+              jq --arg tag "$tag" --argjson pre "$pre" --arg name "$name" --arg pub "$pub" \
+                '. += [{tag:$tag, prerelease:$pre, name:$name, published:$pub, manifest:("fw/"+$tag+"/manifest.json")}]' \
+                _site/versions.json > "$tmp" && mv "$tmp" _site/versions.json
+              echo "  staged $tag (prerelease=$pre)"
+            else
+              echo "  skip $tag (no merged-bin asset)"
+              rmdir "_site/fw/$tag" 2>/dev/null || true
+            fi
+          done
+
+          echo "---- versions.json ----"
+          cat _site/versions.json
 
       - name: Upload Pages artifact
-        if: steps.tag.outputs.skip != 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
-        if: steps.tag.outputs.skip != 'true'
         uses: actions/deploy-pages@v4
