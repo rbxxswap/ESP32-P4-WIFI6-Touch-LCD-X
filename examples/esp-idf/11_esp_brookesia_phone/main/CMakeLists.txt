@@ -2,7 +2,7 @@ idf_component_register(
     SRCS "main.cpp"
     INCLUDE_DIRS "."
     REQUIRES wifi_helper ota_updater
-    PRIV_REQUIRES brookesia_core app_settings)
+    PRIV_REQUIRES brookesia_core app_settings app_diagnostics)
 
 target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-missing-field-initializers)
 
