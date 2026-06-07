@@ -1,8 +1,9 @@
 /*
  * Diagnostics-App - Implementation (Brookesia 0.5 / LVGL v9)
- * D2: System-Info-Panel (Timer 2s, read-only, GUI-thread-safe).
- *     FW, WiFi/IP, Uptime, Heap intern/PSRAM, Reset-Reason, Chip/Cores, IDF.
- *     Log-Terminal (D3) + aktive Tests (D4) folgen.
+ * D2: System-Info-Panel (Timer 2s).
+ * D3: Log-Terminal (esp_log_set_vprintf -> Ringpuffer -> scrollbares Label, Timer 1s, Clear-Btn).
+ *     Hook wird einmal im Ctor (Boot via Registry) installiert; vorheriger Logger wird durchgekettet.
+ * D4 (aktive Tests) folgt.
  */
 #include "lvgl.h"
 #include "esp_brookesia.hpp"
@@ -15,6 +16,10 @@
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include <stdarg.h>
+#include <stdio.h>
 #include "app_diagnostics.hpp"
 extern "C" {
 #include "wifi_helper.h"
@@ -22,6 +27,7 @@ extern "C" {
 }
 
 #define APP_NAME "Diagnostics"
+#define DIAG_RING_SZ 4096
 
 using namespace std;
 using namespace esp_brookesia::gui;
@@ -30,6 +36,55 @@ using namespace esp_brookesia::systems;
 LV_IMG_DECLARE(app_diagnostics_icon_112_112);
 
 namespace esp_brookesia::apps {
+
+/* ---- Log ring buffer + esp_log hook ---- */
+static char            s_ring[DIAG_RING_SZ];
+static size_t          s_ring_head = 0;
+static bool            s_ring_wrap = false;
+static portMUX_TYPE    s_ring_mux  = portMUX_INITIALIZER_UNLOCKED;
+static vprintf_like_t  s_prev_vprintf = nullptr;
+static bool            s_hook_installed = false;
+
+static void ring_append(const char *data, int len)
+{
+    if (len <= 0) {
+        return;
+    }
+    portENTER_CRITICAL(&s_ring_mux);
+    for (int i = 0; i < len; i++) {
+        s_ring[s_ring_head++] = data[i];
+        if (s_ring_head >= DIAG_RING_SZ) {
+            s_ring_head = 0;
+            s_ring_wrap = true;
+        }
+    }
+    portEXIT_CRITICAL(&s_ring_mux);
+}
+
+static int diag_log_vprintf(const char *fmt, va_list args)
+{
+    char tmp[256];
+    va_list cp;
+    va_copy(cp, args);
+    int n = vsnprintf(tmp, sizeof(tmp), fmt, cp);
+    va_end(cp);
+    if (n > 0) {
+        ring_append(tmp, n < (int)sizeof(tmp) ? n : (int)sizeof(tmp) - 1);
+    }
+    if (s_prev_vprintf) {
+        return s_prev_vprintf(fmt, args);   /* serial logging bleibt erhalten */
+    }
+    return 0;
+}
+
+static void install_log_hook_once(void)
+{
+    if (s_hook_installed) {
+        return;
+    }
+    s_prev_vprintf = esp_log_set_vprintf(diag_log_vprintf);
+    s_hook_installed = true;
+}
 
 AppDiagnostics *AppDiagnostics::_instance = nullptr;
 
@@ -44,6 +99,7 @@ AppDiagnostics *AppDiagnostics::requestInstance(bool use_status_bar, bool use_na
 AppDiagnostics::AppDiagnostics(bool use_status_bar, bool use_navigation_bar):
     App(APP_NAME, &app_diagnostics_icon_112_112, true, use_status_bar, use_navigation_bar)
 {
+    install_log_hook_once();
 }
 
 AppDiagnostics::~AppDiagnostics()
@@ -92,6 +148,8 @@ static lv_obj_t *s_l_psram  = nullptr;
 static lv_obj_t *s_l_reset  = nullptr;
 static lv_obj_t *s_l_chip   = nullptr;
 static lv_obj_t *s_l_idf    = nullptr;
+static lv_obj_t *s_log_cont  = nullptr;
+static lv_obj_t *s_log_label = nullptr;
 
 static void refresh_info(void)
 {
@@ -151,23 +209,70 @@ static void refresh_timer_cb(lv_timer_t *t)
     refresh_info();
 }
 
+/* ---- log terminal ---- */
+static char s_render_buf[DIAG_RING_SZ + 1];
+
+static void log_render(void)
+{
+    if (!s_log_label) {
+        return;
+    }
+    size_t out = 0;
+    portENTER_CRITICAL(&s_ring_mux);
+    if (s_ring_wrap) {
+        for (size_t i = s_ring_head; i < DIAG_RING_SZ; i++) {
+            s_render_buf[out++] = s_ring[i];
+        }
+        for (size_t i = 0; i < s_ring_head; i++) {
+            s_render_buf[out++] = s_ring[i];
+        }
+    } else {
+        for (size_t i = 0; i < s_ring_head; i++) {
+            s_render_buf[out++] = s_ring[i];
+        }
+    }
+    portEXIT_CRITICAL(&s_ring_mux);
+    s_render_buf[out] = '\0';
+
+    lv_label_set_text(s_log_label, s_render_buf);
+    if (s_log_cont) {
+        lv_obj_scroll_to_y(s_log_cont, LV_COORD_MAX, LV_ANIM_OFF);   /* auto-scroll to newest */
+    }
+}
+
+static void log_timer_cb(lv_timer_t *t)
+{
+    log_render();
+}
+
+static void log_clear_cb(lv_event_t *e)
+{
+    portENTER_CRITICAL(&s_ring_mux);
+    s_ring_head = 0;
+    s_ring_wrap = false;
+    portEXIT_CRITICAL(&s_ring_mux);
+    if (s_log_label) {
+        lv_label_set_text(s_log_label, "");
+    }
+}
+
 bool AppDiagnostics::run(void)
 {
     lv_obj_t *scr = lv_screen_active();
 
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "Diagnostics");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 36);
 
     auto mk = [&](int y) -> lv_obj_t * {
         lv_obj_t *l = lv_label_create(scr);
         lv_label_set_text(l, "");
-        lv_obj_align(l, LV_ALIGN_TOP_LEFT, 50, y);
+        lv_obj_align(l, LV_ALIGN_TOP_LEFT, 40, y);
         return l;
     };
 
-    int y = 150;
-    const int step = 64;
+    int y = 104;
+    const int step = 44;
     s_l_fw     = mk(y); y += step;
     s_l_wifi   = mk(y); y += step;
     s_l_uptime = mk(y); y += step;
@@ -177,8 +282,36 @@ bool AppDiagnostics::run(void)
     s_l_chip   = mk(y); y += step;
     s_l_idf    = mk(y); y += step;
 
+    /* log section header + clear button */
+    lv_obj_t *log_hdr = lv_label_create(scr);
+    lv_label_set_text(log_hdr, "Log");
+    lv_obj_align(log_hdr, LV_ALIGN_TOP_LEFT, 40, 470);
+
+    lv_obj_t *clr = lv_btn_create(scr);
+    lv_obj_set_size(clr, 170, 56);
+    lv_obj_align(clr, LV_ALIGN_TOP_RIGHT, -30, 460);
+    lv_obj_add_event_cb(clr, log_clear_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *clr_lbl = lv_label_create(clr);
+    lv_label_set_text(clr_lbl, "Clear log");
+    lv_obj_center(clr_lbl);
+
+    /* scrollable log container */
+    lv_obj_t *cont = lv_obj_create(scr);
+    lv_obj_set_size(cont, 760, 600);
+    lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 530);
+    lv_obj_set_scroll_dir(cont, LV_DIR_VER);
+    s_log_cont = cont;
+
+    lv_obj_t *lg = lv_label_create(cont);
+    lv_label_set_long_mode(lg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lg, 712);
+    lv_label_set_text(lg, "");
+    s_log_label = lg;
+
     refresh_info();
+    log_render();
     lv_timer_create(refresh_timer_cb, 2000, nullptr);
+    lv_timer_create(log_timer_cb, 1000, nullptr);
 
     return true;
 }
