@@ -33,11 +33,11 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
 
     bsp_display_cfg_t cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
-        .rotation = ESP_LV_ADAPTER_ROTATE_0,
+        .rotation = ESP_LV_ADAPTER_ROTATE_90,   /* Landscape 1280x800 (Panel nativ 800x1280 Portrait) */
         .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL,
         .touch_flags = {
-            .swap_xy = 0,
-            .mirror_x = 0,
+            .swap_xy = 1,        /* Touch an 90-Grad-Rotation anpassen */
+            .mirror_x = 1,       /* ggf. on-device kalibrieren: mirror_x/mirror_y tauschen */
             .mirror_y = 0}};
 
     ESP_UTILS_CHECK_NULL_EXIT(bsp_display_start_with_config(&cfg), "Start display failed");
@@ -66,7 +66,8 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
     }
     else if ((BSP_LCD_H_RES == 800) && (BSP_LCD_V_RES == 1280))
     {
-        stylesheet = new (std::nothrow) Stylesheet(STYLESHEET_800_1280_DARK);
+        /* Panel wird per ROTATE_90 im Landscape betrieben -> 1280x800-Stylesheet */
+        stylesheet = new (std::nothrow) Stylesheet(STYLESHEET_1280_800_DARK);
         ESP_UTILS_CHECK_NULL_EXIT(stylesheet, "Create stylesheet failed");
     }
     if (stylesheet)
