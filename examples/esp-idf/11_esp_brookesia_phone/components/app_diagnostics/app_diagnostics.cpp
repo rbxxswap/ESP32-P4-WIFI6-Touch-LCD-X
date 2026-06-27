@@ -99,7 +99,10 @@ AppDiagnostics *AppDiagnostics::requestInstance(bool use_status_bar, bool use_na
 AppDiagnostics::AppDiagnostics(bool use_status_bar, bool use_navigation_bar):
     App(APP_NAME, &app_diagnostics_icon_112_112, true, use_status_bar, use_navigation_bar)
 {
-    install_log_hook_once();
+    /* WICHTIG: Log-Hook NICHT hier installieren. Der Konstruktor laeuft beim Boot
+     * (initAppFromRegistry), bevor das erste Frame gerendert ist. Ein globaler
+     * esp_log_set_vprintf in dieser Phase verursacht einen schwarzen Bildschirm
+     * (siehe alpha.2). Hook wird lazy in run() beim Oeffnen der App gesetzt. */
 }
 
 AppDiagnostics::~AppDiagnostics()
@@ -258,6 +261,7 @@ static void log_clear_cb(lv_event_t *e)
 
 bool AppDiagnostics::run(void)
 {
+    install_log_hook_once();   /* erst beim Oeffnen der App aktivieren, nicht beim Boot */
     lv_obj_t *scr = lv_screen_active();
 
     lv_obj_t *title = lv_label_create(scr);
