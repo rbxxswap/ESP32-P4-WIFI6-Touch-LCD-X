@@ -132,6 +132,7 @@ bool AppWeather::run(void)
     lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(root, LV_OBJ_FLAG_SCROLLABLE);
 
+    ESP_UTILS_LOGI("WX1 root ok");
     /* ----- Topbar ----- */
     lv_obj_t *top = mk_panel(root, 0, 0, 1256, 44, 8);
     lv_obj_t *clk = mk_label(top, "12:42", &lv_font_montserrat_22, COL_TXT, 0, 2);
@@ -144,6 +145,7 @@ bool AppWeather::run(void)
     mk_label(top, LV_SYMBOL_WIFI, &lv_font_montserrat_16, COL_TXT2, 1150, 6);
     mk_label(top, LV_SYMBOL_SETTINGS, &lv_font_montserrat_16, COL_TXT2, 1200, 6);
 
+    ESP_UTILS_LOGI("WX2 topbar ok");
     /* ----- AKTUELL (links) ----- */
     lv_obj_t *cur = mk_panel(root, 0, 66, 470, 300, 16);
     lv_obj_t *pill = lv_obj_create(cur);
@@ -176,6 +178,7 @@ bool AppWeather::run(void)
     mk_label(chip2, "24.0" DEG, &lv_font_montserrat_20, COL_AMBER, 0, 0);
     mk_label(chip2, "Gefuehlt", &lv_font_montserrat_12, COL_TXT2, 0, 28);
 
+    ESP_UTILS_LOGI("WX3 aktuell ok");
     /* ----- HEUTE STUENDLICH (rechts) ----- */
     lv_obj_t *hr = mk_panel(root, 480, 66, 776, 300, 14);
     mk_label(hr, LV_SYMBOL_REFRESH " HEUTE - STUENDLICH", &lv_font_montserrat_14, COL_TXT2, 0, 0);
@@ -193,6 +196,7 @@ bool AppWeather::run(void)
         mk_label(hr, t, &lv_font_montserrat_16, COL_TXT, x + 20, 116);
     }
 
+    ESP_UTILS_LOGI("WX4 hourly cols ok, before chart");
     /* Temperaturkurve */
     lv_obj_t *chart = lv_chart_create(hr);
     lv_obj_set_size(chart, 740, 70);
@@ -216,6 +220,7 @@ bool AppWeather::run(void)
         mk_label(hr, r, &lv_font_montserrat_14, COL_RAIN, i * colw + 18, 230);
     }
 
+    ESP_UTILS_LOGI("WX5 chart+rain ok");
     /* ----- Metrik-Karten ----- */
     int my = 376, mh = 170, mw = 306;
     int mx[4] = {0, 316, 632, 948};
@@ -246,6 +251,7 @@ bool AppWeather::run(void)
         lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLLABLE);
     }
 
+    ESP_UTILS_LOGI("WX6 wind+rain cards ok, before arc");
     /* UV-INDEX (Arc-Gauge) */
     lv_obj_t *up = mk_panel(root, mx[2], my, mw, mh, 14);
     mk_label(up, "UV-INDEX", &lv_font_montserrat_14, COL_UV, 0, 0);
@@ -273,6 +279,7 @@ bool AppWeather::run(void)
     mk_label(bp, "680", &lv_font_montserrat_24, COL_GREEN, 0, 100);
     mk_label(bp, "W/m" DEG " Solar", &lv_font_montserrat_14, COL_TXT2, 70, 108);
 
+    ESP_UTILS_LOGI("WX7 metrics ok (arc done), before 7day");
     /* ----- 7-TAGE-VORHERSAGE ----- */
     lv_obj_t *wk = mk_panel(root, 0, 556, 1256, 220, 14);
     mk_label(wk, LV_SYMBOL_LIST " 7-TAGE-VORHERSAGE", &lv_font_montserrat_14, COL_TXT2, 0, 0);
@@ -300,6 +307,7 @@ bool AppWeather::run(void)
         mk_label(dc, rr, &lv_font_montserrat_14, COL_RAIN, 0, 110);
     }
 
+    ESP_UTILS_LOGI("WX8 run() complete (7day ok) - returning");
     return true;
 }
 
