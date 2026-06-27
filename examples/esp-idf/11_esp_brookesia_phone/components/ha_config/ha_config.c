@@ -142,18 +142,17 @@ static bool form_get(const char *body, const char *key, char *out, size_t outsiz
 /* Setzt Feld nur, wenn im Formular vorhanden (Textfeld immer ueberschreiben). */
 static void apply_text(const char *body, const char *key, char *dst, size_t dstsize)
 {
-    char val[512];
-    if (form_get(body, key, val, sizeof(val))) {
-        snprintf(dst, dstsize, "%s", val);
-    }
+    /* form_get schreibt urldecodiert + nullterminiert, begrenzt durch dstsize. */
+    form_get(body, key, dst, dstsize);
 }
 
 /* Secrets nur ueberschreiben, wenn nicht leer (sonst alten Wert behalten). */
 static void apply_secret(const char *body, const char *key, char *dst, size_t dstsize)
 {
-    char val[512];
-    if (form_get(body, key, val, sizeof(val)) && val[0] != 0) {
-        snprintf(dst, dstsize, "%s", val);
+    char tmp[256] = {0};
+    if (dstsize > sizeof(tmp)) dstsize = sizeof(tmp);
+    if (form_get(body, key, tmp, dstsize) && tmp[0] != 0) {
+        memcpy(dst, tmp, dstsize);
     }
 }
 
