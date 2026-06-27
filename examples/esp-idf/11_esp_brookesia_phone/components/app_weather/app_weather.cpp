@@ -80,16 +80,11 @@ bool AppWeather::run(void)
 {
     esp_rom_printf("WX_ENTER run()\n");
 
-    lv_obj_t *root = lv_obj_create(lv_scr_act());
-    lv_obj_set_pos(root, 0, 0);
-    lv_obj_set_size(root, 1280, 800);
+    /* Direkt auf den aktiven Screen bauen (wie app_settings / ARCHITECTURE.md),
+     * KEIN deckendes Vollbild-Overlay -> das blockierte das Rendern. */
+    lv_obj_t *root = lv_scr_act();
     lv_obj_set_style_bg_color(root, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(root, 0, 0);
-    lv_obj_set_style_radius(root, 0, 0);
-    lv_obj_set_style_pad_all(root, 12, 0);
-    lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_remove_flag(root, LV_OBJ_FLAG_SCROLLABLE);
     esp_rom_printf("WX_ROOT done\n");
 
     lv_obj_t *top = mk_panel(root, 0, 0, 1256, 44);
