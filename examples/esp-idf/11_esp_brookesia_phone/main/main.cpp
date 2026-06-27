@@ -35,7 +35,7 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
     bsp_display_cfg_t cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
         .rotation = ESP_LV_ADAPTER_ROTATE_90,   /* Landscape 1280x800 (Panel nativ 800x1280 Portrait) */
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_FULL,   /* Rotation braucht Vollbild-Puffer, nicht PARTIAL (sonst Freeze beim App-Oeffnen) */
         .touch_flags = {
             .swap_xy = 1,        /* Touch an 90-Grad-Rotation anpassen */
             .mirror_x = 1,       /* ggf. on-device kalibrieren: mirror_x/mirror_y tauschen */
