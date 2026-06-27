@@ -22,7 +22,7 @@ constexpr Display::Data STYLESHEET_1280_800_DARK_DISPLAY_DATA = {
     },
     .navigation_bar = {
         .data = STYLESHEET_1280_800_DARK_NAVIGATION_BAR_DATA,
-        .visual_mode = NavigationBar::VisualMode::HIDE,
+        .visual_mode = NavigationBar::VisualMode::SHOW_FIXED,
     },
     .app_launcher = {
         .data = STYLESHEET_1280_800_DARK_APP_LAUNCHER_DATA,
@@ -53,7 +53,7 @@ constexpr Manager::Data STYLESHEET_1280_800_DARK_MANAGER_DATA = {
     },
     .flags = {
         .enable_gesture = 1,
-        .enable_gesture_navigation_back = 0,
+        .enable_gesture_navigation_back = 1,
         .enable_recents_screen_snapshot_drag = 1,
         .enable_recents_screen_hide_when_no_snapshot = 1,
     },
