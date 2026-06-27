@@ -10,6 +10,7 @@
 extern "C" {
 #include "wifi_helper.h"
 #include "ota_updater.h"
+#include "ha_config.h"
 }
 #ifdef ESP_UTILS_LOG_TAG
 #undef ESP_UTILS_LOG_TAG
@@ -158,11 +159,13 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
         });
         boost::thread([]() {
             ESP_UTILS_LOGI("WiFi+OTA Bootstrap, FW v%s", ota_updater_get_current_version());
+            ha_config_load();
             if (wifi_helper_start_blocking() == ESP_OK) {
-                ESP_UTILS_LOGI("WiFi connected, init OTA from NVS");
+                ESP_UTILS_LOGI("WiFi connected, init OTA + HA-Config-Webserver");
                 ota_updater_init_from_nvs();
+                ha_config_start_web();
             } else {
-                ESP_UTILS_LOGW("WiFi connect failed, no OTA");
+                ESP_UTILS_LOGW("WiFi connect failed, no OTA/Config-Web");
             }
         }).detach();
     }
