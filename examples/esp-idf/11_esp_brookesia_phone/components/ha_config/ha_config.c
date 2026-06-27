@@ -2,6 +2,7 @@
  * ha_config - Implementation (Phase 2, Schritt P2.1).
  * NVS-Blob + lokale Web-Config-Page (esp_http_server).
  */
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -143,8 +144,7 @@ static void apply_text(const char *body, const char *key, char *dst, size_t dsts
 {
     char val[512];
     if (form_get(body, key, val, sizeof(val))) {
-        strncpy(dst, val, dstsize - 1);
-        dst[dstsize - 1] = 0;
+        snprintf(dst, dstsize, "%s", val);
     }
 }
 
@@ -153,8 +153,7 @@ static void apply_secret(const char *body, const char *key, char *dst, size_t ds
 {
     char val[512];
     if (form_get(body, key, val, sizeof(val)) && val[0] != 0) {
-        strncpy(dst, val, dstsize - 1);
-        dst[dstsize - 1] = 0;
+        snprintf(dst, dstsize, "%s", val);
     }
 }
 
