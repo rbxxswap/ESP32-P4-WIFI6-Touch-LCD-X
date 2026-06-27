@@ -12,8 +12,8 @@ namespace esp_brookesia::systems::phone {
 
 constexpr base::Display::Data STYLESHEET_1280_800_DARK_CORE_DISPLAY_DATA = {
     .background = {
-        .color = gui::StyleColor::COLOR(0x1A1A1A),
-        .wallpaper_image_resource = gui::StyleImage::IMAGE(&esp_brookesia_image_large_wallpaper_dark_720_720),
+        .color = gui::StyleColor::COLOR(0x0D1117),
+        .wallpaper_image_resource = NULL,
     },
     .text = {
         .default_fonts_num = 21,
