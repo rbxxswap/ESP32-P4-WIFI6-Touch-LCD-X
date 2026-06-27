@@ -14,6 +14,7 @@
 #include "esp_lib_utils.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "esp_attr.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
 #include "esp_log.h"
@@ -38,7 +39,7 @@ LV_IMG_DECLARE(app_diagnostics_icon_112_112);
 namespace esp_brookesia::apps {
 
 /* ---- Log ring buffer + esp_log hook ---- */
-static char            s_ring[DIAG_RING_SZ];
+static EXT_RAM_BSS_ATTR char s_ring[DIAG_RING_SZ];   /* PSRAM: schont internen RAM (Boot-OOM-Fix) */
 static size_t          s_ring_head = 0;
 static bool            s_ring_wrap = false;
 static portMUX_TYPE    s_ring_mux  = portMUX_INITIALIZER_UNLOCKED;
@@ -213,7 +214,7 @@ static void refresh_timer_cb(lv_timer_t *t)
 }
 
 /* ---- log terminal ---- */
-static char s_render_buf[DIAG_RING_SZ + 1];
+static EXT_RAM_BSS_ATTR char s_render_buf[DIAG_RING_SZ + 1];
 
 static void log_render(void)
 {

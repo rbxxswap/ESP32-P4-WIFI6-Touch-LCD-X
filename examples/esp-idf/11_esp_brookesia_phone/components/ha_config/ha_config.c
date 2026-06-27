@@ -9,13 +9,14 @@
 #include "nvs.h"
 #include "esp_log.h"
 #include "esp_http_server.h"
+#include "esp_attr.h"
 #include "ha_config.h"
 
 #define TAG            "ha_config"
 #define HA_NVS_NS      "ha_cfg"
 #define HA_NVS_KEY     "cfg"
 
-static ha_config_t   s_cfg;
+static EXT_RAM_BSS_ATTR ha_config_t s_cfg;
 static bool          s_loaded;
 static httpd_handle_t s_server;
 
