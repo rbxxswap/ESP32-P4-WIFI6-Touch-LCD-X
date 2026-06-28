@@ -22,7 +22,7 @@ constexpr Display::Data STYLESHEET_1280_800_DARK_DISPLAY_DATA = {
     },
     .navigation_bar = {
         .data = STYLESHEET_1280_800_DARK_NAVIGATION_BAR_DATA,
-        .visual_mode = NavigationBar::VisualMode::SHOW_FIXED,
+        .visual_mode = NavigationBar::VisualMode::HIDE,
     },
     .app_launcher = {
         .data = STYLESHEET_1280_800_DARK_APP_LAUNCHER_DATA,
