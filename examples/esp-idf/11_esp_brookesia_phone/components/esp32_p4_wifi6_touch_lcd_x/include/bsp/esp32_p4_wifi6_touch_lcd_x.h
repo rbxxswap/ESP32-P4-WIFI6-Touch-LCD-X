@@ -46,7 +46,7 @@
 #define BSP_LCD_BACKLIGHT     (GPIO_NUM_26)
 #define BSP_LCD_RST           (GPIO_NUM_27)
 #define BSP_LCD_TOUCH_RST     (GPIO_NUM_NC)
-#define BSP_LCD_TOUCH_INT     (GPIO_NUM_NC)
+#define BSP_LCD_TOUCH_INT     (GPIO_NUM_33)   /* INT real verdrahtet (0R-Bruecken R32/R37) -> Interrupt-Touch statt Polling */
 
 /* uSD card */
 #define BSP_SD_D0             (GPIO_NUM_39)
