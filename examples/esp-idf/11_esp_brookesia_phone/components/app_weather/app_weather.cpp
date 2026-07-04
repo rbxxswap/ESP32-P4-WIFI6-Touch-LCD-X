@@ -84,7 +84,7 @@ static lv_obj_t *mk_label(lv_obj_t *parent, const char *txt, const lv_font_t *fo
 static lv_obj_t   *s_lbl_temp  = nullptr;
 static lv_obj_t   *s_lbl_cond  = nullptr;
 static lv_obj_t   *s_lbl_humid = nullptr;
-static lv_obj_t   *s_lbl_wind  = nullptr;
+static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr }; /* WIND, REGEN, UV, HELLIGKEIT */
 static lv_timer_t *s_wx_timer  = nullptr;
 static uint32_t    s_last_rev  = 0;
 
@@ -126,9 +126,21 @@ static void wx_update_cb(lv_timer_t *t)
         snprintf(buf, sizeof(buf), "%.0f %%", w.humidity);
         lv_label_set_text(s_lbl_humid, buf);
     }
-    if (w.has_wind && s_lbl_wind) {
-        snprintf(buf, sizeof(buf), "%.0f km/h", w.wind_speed);
-        lv_label_set_text(s_lbl_wind, buf);
+    if (w.has_wind && s_lbl_metric[0]) {
+        snprintf(buf, sizeof(buf), "%.1f km/h", w.wind_speed);
+        lv_label_set_text(s_lbl_metric[0], buf);
+    }
+    if (w.has_rain && s_lbl_metric[1]) {
+        snprintf(buf, sizeof(buf), "%.1f mm/h", w.rain_rate);
+        lv_label_set_text(s_lbl_metric[1], buf);
+    }
+    if (w.has_uv && s_lbl_metric[2]) {
+        snprintf(buf, sizeof(buf), "%.1f", w.uv);
+        lv_label_set_text(s_lbl_metric[2], buf);
+    }
+    if (w.has_light && s_lbl_metric[3]) {
+        snprintf(buf, sizeof(buf), "%.0f klx", w.light_lx / 1000.0f);
+        lv_label_set_text(s_lbl_metric[3], buf);
     }
 }
 
@@ -137,7 +149,8 @@ static void wx_cleanup_cb(lv_event_t *e)
 {
     (void)e;
     if (s_wx_timer) { lv_timer_delete(s_wx_timer); s_wx_timer = nullptr; }
-    s_lbl_temp = s_lbl_cond = s_lbl_humid = s_lbl_wind = nullptr;
+    s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
+    for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
 }
 
 bool AppWeather::run(void)
@@ -184,8 +197,7 @@ bool AppWeather::run(void)
     for (int i = 0; i < 4; i++) {
         lv_obj_t *m = mk_panel(root, mx[i], 376, 306, 150);
         mk_label(m, mt[i], &lv_font_montserrat_14, COL_AMBER, 0, 0);
-        lv_obj_t *vlbl = mk_label(m, mv[i], &lv_font_montserrat_30, COL_TXT, 0, 50);
-        if (i == 0) s_lbl_wind = vlbl;   /* WIND-Wert live aktualisieren */
+        s_lbl_metric[i] = mk_label(m, mv[i], &lv_font_montserrat_30, COL_TXT, 0, 50);
     }
     esp_rom_printf("WX_METRICS done\n");
 
@@ -217,7 +229,8 @@ bool AppWeather::run(void)
 bool AppWeather::back(void)
 {
     if (s_wx_timer) { lv_timer_delete(s_wx_timer); s_wx_timer = nullptr; }
-    s_lbl_temp = s_lbl_cond = s_lbl_humid = s_lbl_wind = nullptr;
+    s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
+    for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
     ESP_UTILS_CHECK_FALSE_RETURN(notifyCoreClosed(), false, "Notify core closed failed");
     return true;
 }

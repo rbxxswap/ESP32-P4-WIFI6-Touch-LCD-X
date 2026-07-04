@@ -1,5 +1,9 @@
 /*
- * ha_provider - Implementation (Phase 2.2, MQTT-Lesepfad).
+ * ha_provider - Implementation (Phase 2.2, HA-REST/Token).
+ *
+ * Pollt periodisch die HA-REST-API mit Bearer-Token:
+ *   - Bresser-Einzelsensoren (bresser_prefix + Suffix) fuer aktuelle Werte
+ *   - weather_entity fuer den Zustandstext (condition)
  */
 #include "ha_provider.h"
 #include "ha_config.h"
@@ -8,113 +12,148 @@
 #include <stdlib.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "mqtt_client.h"
+#include "esp_http_client.h"
 #include "esp_log.h"
+#include "cJSON.h"
 
 static const char *TAG = "ha_provider";
 
-static esp_mqtt_client_handle_t s_client = NULL;
-static SemaphoreHandle_t        s_lock   = NULL;
-static volatile bool            s_connected = false;
+static SemaphoreHandle_t s_lock;
+static ha_weather_t      s_weather;             /* geschuetzt durch s_lock */
+static volatile bool     s_connected;
+static volatile bool     s_started;
 
-static ha_weather_t s_weather;                 /* geschuetzt durch s_lock */
-static char         s_sub_topic[48];           /* "<base>/#" */
-static char         s_wx_prefix[128];          /* "<base>/weather/<object>/" (gross genug fuer Werror=format-truncation) */
-static size_t       s_wx_prefix_len = 0;
-
-/* ---- Hilfen ---- */
+/* Config-Snapshot beim Start */
+static char s_base[96];            /* "http://host:port" */
+static char s_auth[300];           /* "Bearer <token>" */
+static char s_bresser[64];         /* Bresser-Prefix */
+static char s_weather_entity[64];
 
 static void lock(void)   { if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY); }
 static void unlock(void) { if (s_lock) xSemaphoreGive(s_lock); }
 
-/* Kopiert bounded + null-terminiert (esp-mqtt liefert nicht null-terminiert). */
-static void copy_bounded(char *dst, size_t dstsz, const char *src, int len)
+/* GET /api/states/<entity> -> "state" nach out. true wenn ok und nicht unknown/unavailable. */
+static bool fetch_state(const char *entity, char *out, size_t outsz)
 {
-    if (len < 0) len = 0;
-    if ((size_t)len >= dstsz) len = (int)dstsz - 1;
-    memcpy(dst, src, len);
-    dst[len] = '\0';
-}
+    char url[288];
+    snprintf(url, sizeof(url), "%s/api/states/%s", s_base, entity);
 
-/* Verarbeitet ein weather-Attribut/State. field = z.B. "temperature". */
-static void handle_weather_field(const char *field, const char *value)
-{
-    lock();
-    if (strcmp(field, "state") == 0) {
-        strncpy(s_weather.condition, value, sizeof(s_weather.condition) - 1);
-        s_weather.condition[sizeof(s_weather.condition) - 1] = '\0';
-        s_weather.valid = true;
-        s_weather.revision++;
-    } else if (strcmp(field, "temperature") == 0) {
-        s_weather.temperature = strtof(value, NULL);
-        s_weather.has_temperature = true;
-        s_weather.valid = true;
-        s_weather.revision++;
-    } else if (strcmp(field, "humidity") == 0) {
-        s_weather.humidity = strtof(value, NULL);
-        s_weather.has_humidity = true;
-        s_weather.valid = true;
-        s_weather.revision++;
-    } else if (strcmp(field, "wind_speed") == 0) {
-        s_weather.wind_speed = strtof(value, NULL);
-        s_weather.has_wind = true;
-        s_weather.valid = true;
-        s_weather.revision++;
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .timeout_ms = 6000,
+        .method = HTTP_METHOD_GET,
+    };
+    esp_http_client_handle_t cl = esp_http_client_init(&cfg);
+    if (!cl) return false;
+    esp_http_client_set_header(cl, "Authorization", s_auth);
+
+    bool ok = false;
+    char *buf = malloc(4096);
+    if (buf && esp_http_client_open(cl, 0) == ESP_OK) {
+        esp_http_client_fetch_headers(cl);
+        int status = esp_http_client_get_status_code(cl);
+        int r = esp_http_client_read_response(cl, buf, 4095);
+        if (status == 200 && r > 0) {
+            buf[r] = 0;
+            cJSON *root = cJSON_Parse(buf);
+            if (root) {
+                cJSON *st = cJSON_GetObjectItem(root, "state");
+                if (cJSON_IsString(st) && st->valuestring) {
+                    strncpy(out, st->valuestring, outsz - 1);
+                    out[outsz - 1] = 0;
+                    ok = strcmp(out, "unknown") != 0 && strcmp(out, "unavailable") != 0;
+                }
+                cJSON_Delete(root);
+            }
+        } else {
+            ESP_LOGW(TAG, "HTTP %d fuer %s", status, entity);
+        }
     }
-    unlock();
+    free(buf);
+    esp_http_client_close(cl);
+    esp_http_client_cleanup(cl);
+    return ok;
 }
 
-static void on_data(esp_mqtt_event_handle_t e)
+/* Numerischen Zustand von "<bresser_prefix>_<suffix>" holen. */
+static bool fetch_bresser_float(const char *suffix, float *out)
 {
-    char topic[96];
-    char value[48];
-    copy_bounded(topic, sizeof(topic), e->topic, e->topic_len);
-    copy_bounded(value, sizeof(value), e->data,  e->data_len);
-
-    if (s_wx_prefix_len > 0 && strncmp(topic, s_wx_prefix, s_wx_prefix_len) == 0) {
-        const char *field = topic + s_wx_prefix_len;
-        handle_weather_field(field, value);
-        ESP_LOGD(TAG, "weather %s = %s", field, value);
+    char entity[160];
+    snprintf(entity, sizeof(entity), "%s_%s", s_bresser, suffix);
+    char st[32];
+    if (fetch_state(entity, st, sizeof(st))) {
+        *out = strtof(st, NULL);
+        return true;
     }
+    return false;
 }
 
-static void mqtt_event_handler(void *args, esp_event_base_t base, int32_t id, void *data)
+static void poll_once(void)
 {
-    (void)args; (void)base;
-    esp_mqtt_event_handle_t e = (esp_mqtt_event_handle_t)data;
-    switch ((esp_mqtt_event_id_t)id) {
-    case MQTT_EVENT_CONNECTED:
+    ha_weather_t w;
+    lock(); w = s_weather; unlock();     /* auf bestehendem Stand aufsetzen */
+
+    bool any = false;
+    float f;
+
+    if (s_weather_entity[0]) {
+        char cond[24];
+        if (fetch_state(s_weather_entity, cond, sizeof(cond))) {
+            strncpy(w.condition, cond, sizeof(w.condition) - 1);
+            w.condition[sizeof(w.condition) - 1] = 0;
+            any = true;
+        }
+    }
+    if (s_bresser[0]) {
+        if (fetch_bresser_float("temperatur",  &f)) { w.temperature = f; w.has_temperature = true; any = true; }
+        if (fetch_bresser_float("luftfeuchte",  &f)) { w.humidity    = f; w.has_humidity    = true; any = true; }
+        if (fetch_bresser_float("wind",         &f)) { w.wind_speed  = f; w.has_wind        = true; any = true; }
+        if (fetch_bresser_float("regenrate",    &f)) { w.rain_rate   = f; w.has_rain        = true; any = true; }
+        if (fetch_bresser_float("uv_index",     &f)) { w.uv          = f; w.has_uv          = true; any = true; }
+        if (fetch_bresser_float("beleuchtung",  &f)) { w.light_lx    = f; w.has_light       = true; any = true; }
+        if (fetch_bresser_float("windrichtung", &f)) { w.wind_dir    = (int)f; w.has_dir    = true; any = true; }
+    }
+
+    if (any) {
+        w.valid = true;
+        w.revision++;
+        lock(); s_weather = w; unlock();
         s_connected = true;
-        ESP_LOGI(TAG, "MQTT verbunden, subscribe '%s'", s_sub_topic);
-        esp_mqtt_client_subscribe(s_client, s_sub_topic, 0);
-        break;
-    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "Update: %.1fC %.0f%% wind %.1f rain %.1f uv %.1f lux %.0f cond=%s",
+                 w.temperature, w.humidity, w.wind_speed, w.rain_rate, w.uv, w.light_lx, w.condition);
+    } else {
         s_connected = false;
-        ESP_LOGW(TAG, "MQTT getrennt");
-        break;
-    case MQTT_EVENT_DATA:
-        on_data(e);
-        break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGW(TAG, "MQTT-Fehler");
-        break;
-    default:
-        break;
+        ESP_LOGW(TAG, "Poll: keine Werte erhalten");
     }
 }
 
-/* ---- Public API ---- */
+static void poll_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(3000));     /* Netif etwas Zeit geben */
+    for (;;) {
+        poll_once();
+        vTaskDelay(pdMS_TO_TICKS(30000));
+    }
+}
 
 esp_err_t ha_provider_start(void)
 {
-    if (s_client) return ESP_OK;           /* schon gestartet (idempotent) */
+    if (s_started) return ESP_OK;
 
     const ha_config_t *cfg = ha_config_get();
-    if (!cfg || cfg->mqtt_host[0] == '\0') {
-        ESP_LOGW(TAG, "Kein MQTT-Broker konfiguriert - ha_provider bleibt inaktiv");
+    if (!cfg || cfg->ha_host[0] == '\0' || cfg->ha_token[0] == '\0') {
+        ESP_LOGW(TAG, "Kein HA-Host/Token konfiguriert - ha_provider bleibt inaktiv");
         return ESP_ERR_INVALID_STATE;
     }
+
+    uint16_t port = cfg->ha_port ? cfg->ha_port : 8123;
+    snprintf(s_base, sizeof(s_base), "http://%s:%u", cfg->ha_host, (unsigned)port);
+    snprintf(s_auth, sizeof(s_auth), "Bearer %s", cfg->ha_token);
+    strncpy(s_bresser, cfg->bresser_prefix, sizeof(s_bresser) - 1);
+    strncpy(s_weather_entity, cfg->weather_entity, sizeof(s_weather_entity) - 1);
 
     if (!s_lock) {
         s_lock = xSemaphoreCreateMutex();
@@ -122,49 +161,13 @@ esp_err_t ha_provider_start(void)
     }
     memset(&s_weather, 0, sizeof(s_weather));
 
-    const char *base = (cfg->base_topic[0] != '\0') ? cfg->base_topic : "ha_display";
-    snprintf(s_sub_topic, sizeof(s_sub_topic), "%s/#", base);
-
-    /* weather_entity "weather.home" -> object "home" -> Prefix "<base>/weather/home/" */
-    if (cfg->weather_entity[0] != '\0') {
-        const char *dot = strchr(cfg->weather_entity, '.');
-        const char *obj = dot ? dot + 1 : cfg->weather_entity;
-        snprintf(s_wx_prefix, sizeof(s_wx_prefix), "%s/weather/%s/", base, obj);
-        s_wx_prefix_len = strlen(s_wx_prefix);
-    } else {
-        s_wx_prefix_len = 0;
-        ESP_LOGW(TAG, "Keine weather_entity gesetzt - Wetter-Parsing inaktiv");
-    }
-
-    char uri[96];
-    uint16_t port = cfg->mqtt_port ? cfg->mqtt_port : 1883;
-    snprintf(uri, sizeof(uri), "mqtt://%s:%u", cfg->mqtt_host, (unsigned)port);
-
-    esp_mqtt_client_config_t mcfg = {0};
-    mcfg.broker.address.uri = uri;
-    if (cfg->mqtt_user[0] != '\0') {
-        mcfg.credentials.username = cfg->mqtt_user;
-    }
-    if (cfg->mqtt_pass[0] != '\0') {
-        mcfg.credentials.authentication.password = cfg->mqtt_pass;
-    }
-
-    s_client = esp_mqtt_client_init(&mcfg);
-    if (!s_client) {
-        ESP_LOGE(TAG, "esp_mqtt_client_init fehlgeschlagen");
+    s_started = true;
+    if (xTaskCreate(poll_task, "ha_poll", 8192, NULL, 4, NULL) != pdPASS) {
+        s_started = false;
         return ESP_FAIL;
     }
-    esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-
-    esp_err_t err = esp_mqtt_client_start(s_client);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_mqtt_client_start: %s", esp_err_to_name(err));
-        esp_mqtt_client_destroy(s_client);
-        s_client = NULL;
-        return err;
-    }
-    ESP_LOGI(TAG, "ha_provider gestartet: broker=%s, weather-prefix='%s'",
-             uri, s_wx_prefix_len ? s_wx_prefix : "(keins)");
+    ESP_LOGI(TAG, "ha_provider (REST) gestartet: base=%s bresser='%s' weather='%s'",
+             s_base, s_bresser, s_weather_entity);
     return ESP_OK;
 }
 

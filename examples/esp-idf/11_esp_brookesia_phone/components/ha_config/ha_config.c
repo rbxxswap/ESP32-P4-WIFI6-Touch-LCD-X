@@ -29,6 +29,7 @@ static void set_defaults(ha_config_t *c)
     memset(c, 0, sizeof(*c));
     c->version = HA_CFG_VERSION;
     c->mqtt_port = 1883;
+    c->ha_port = 8123;
     strncpy(c->base_topic, "ha_display", sizeof(c->base_topic) - 1);
 }
 
@@ -187,17 +188,21 @@ static esp_err_t get_handler(httpd_req_t *req)
         "<label>Benutzer</label><input name=mqtt_user value='%s'>"
         "<label>Passwort <small>(leer = unveraendert)</small></label><input name=mqtt_pass type=password value=''>"
         "<label>base_topic</label><input name=base_topic value='%s'>"
-        "<h2>Home Assistant (steuern)</h2>"
-        "<label>WebSocket-URL</label><input name=ha_ws_url value='%s'>"
+        "<h2>Home Assistant (REST + steuern)</h2>"
+        "<label>HA-Host</label><input name=ha_host value='%s'>"
+        "<label>HA-Port</label><input name=ha_port value='%u'>"
+        "<label>WebSocket-URL <small>(optional)</small></label><input name=ha_ws_url value='%s'>"
         "<label>Long-Lived Token <small>(leer = unveraendert)</small></label><input name=ha_token type=password value=''>"
         "<h2>Entities</h2>"
-        "<label>Wetter-Entity</label><input name=weather_entity value='%s'>"
+        "<label>Wetter/Forecast-Entity</label><input name=weather_entity value='%s'>"
+        "<label>Bresser-Prefix <small>(aktuelle Werte)</small></label><input name=bresser_prefix value='%s'>"
         "<label>Energie <small>id|Label|Einheit;...</small></label><input name=energy_csv value='%s'>"
         "<label>Licht/Schalter <small>id|Label;...</small></label><input name=light_csv value='%s'>"
         "<label>Szenen <small>id|Label;...</small></label><input name=scene_csv value='%s'>"
         "<button type=submit>Speichern</button></form></body></html>",
         PAGE_HEAD, c->mqtt_host, (unsigned)c->mqtt_port, c->mqtt_user, c->base_topic,
-        c->ha_ws_url, c->weather_entity, c->energy_csv, c->light_csv, c->scene_csv);
+        c->ha_host, (unsigned)c->ha_port, c->ha_ws_url, c->weather_entity, c->bresser_prefix,
+        c->energy_csv, c->light_csv, c->scene_csv);
 
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, buf, (n > 0 && n < 6144) ? n : HTTPD_RESP_USE_STRLEN);
@@ -239,9 +244,16 @@ static esp_err_t post_handler(httpd_req_t *req)
     apply_text(body, "mqtt_user", nc.mqtt_user, sizeof(nc.mqtt_user));
     apply_secret(body, "mqtt_pass", nc.mqtt_pass, sizeof(nc.mqtt_pass));
     apply_text(body, "base_topic", nc.base_topic, sizeof(nc.base_topic));
+    apply_text(body, "ha_host", nc.ha_host, sizeof(nc.ha_host));
+    char haport[8];
+    if (form_get(body, "ha_port", haport, sizeof(haport)) && haport[0]) {
+        int p = atoi(haport);
+        if (p > 0 && p < 65536) nc.ha_port = (uint16_t)p;
+    }
     apply_text(body, "ha_ws_url", nc.ha_ws_url, sizeof(nc.ha_ws_url));
     apply_secret(body, "ha_token", nc.ha_token, sizeof(nc.ha_token));
     apply_text(body, "weather_entity", nc.weather_entity, sizeof(nc.weather_entity));
+    apply_text(body, "bresser_prefix", nc.bresser_prefix, sizeof(nc.bresser_prefix));
     apply_text(body, "energy_csv", nc.energy_csv, sizeof(nc.energy_csv));
     apply_text(body, "light_csv", nc.light_csv, sizeof(nc.light_csv));
     apply_text(body, "scene_csv", nc.scene_csv, sizeof(nc.scene_csv));

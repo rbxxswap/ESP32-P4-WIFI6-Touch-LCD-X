@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define HA_CFG_VERSION 1
+#define HA_CFG_VERSION 2
 
 typedef struct {
     uint8_t  version;
@@ -31,11 +31,14 @@ typedef struct {
     char     mqtt_user[48];
     char     mqtt_pass[64];
     char     base_topic[32];     /* mqtt_statestream base_topic, default "ha_display" */
-    /* HA WebSocket (steuern + Forecast) */
-    char     ha_ws_url[96];      /* z.B. ws://192.168.1.10:8123/api/websocket */
+    /* HA REST + WebSocket (Token-Weg) */
+    char     ha_host[64];        /* HA IP/Host fuer REST+WS, z.B. 192.168.1.60 */
+    uint16_t ha_port;            /* default 8123 */
+    char     ha_ws_url[96];      /* optional, z.B. ws://192.168.1.10:8123/api/websocket */
     char     ha_token[256];      /* Long-Lived Access Token */
-    /* Entity-Mapping (CSV) */
-    char     weather_entity[64]; /* z.B. weather.home */
+    /* Entity-Mapping */
+    char     weather_entity[64]; /* Zustand + Forecast, z.B. weather.forecast_home_2 */
+    char     bresser_prefix[64]; /* aktuelle Werte, z.B. sensor.bresser_weather_0000240e_ch_0 */
     char     energy_csv[192];
     char     light_csv[192];
     char     scene_csv[192];
