@@ -104,10 +104,15 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
             time(&now);
             localtime_r(&now, &timeinfo);
 
+            auto *status_bar = phone->getDisplay().getStatusBar();
             ESP_UTILS_CHECK_FALSE_EXIT(
-                phone->getDisplay().getStatusBar()->setClock(timeinfo.tm_hour, timeinfo.tm_min),
+                status_bar->setClock(timeinfo.tm_hour, timeinfo.tm_min),
                 "Refresh status bar failed"
-            ); }, 1000, phone);
+            );
+            /* WiFi-Icon an echten Verbindungszustand koppeln - sonst bleibt es dauerhaft durchgestrichen */
+            status_bar->setWifiIconState(wifi_helper_is_connected()
+                                         ? StatusBar::WifiState::SIGNAL_3
+                                         : StatusBar::WifiState::DISCONNECTED); }, 1000, phone);
     }
 
     if constexpr (EXAMPLE_SHOW_MEM_INFO)
