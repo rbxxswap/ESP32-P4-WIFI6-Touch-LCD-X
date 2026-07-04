@@ -209,13 +209,14 @@ static esp_err_t get_handler(httpd_req_t *req)
         "<h2>Entities</h2>"
         "<label>Wetter/Forecast-Entity</label><input name=weather_entity value='%s'>"
         "<label>Bresser-Prefix <small>(aktuelle Werte)</small></label><input name=bresser_prefix value='%s'>"
+        "<label>Temperatur-Entity <small>(optional, ersetzt Bresser-Temp)</small></label><input name=temp_entity value='%s'>"
         "<label>Energie <small>id|Label|Einheit;...</small></label><input name=energy_csv value='%s'>"
         "<label>Licht/Schalter <small>id|Label;...</small></label><input name=light_csv value='%s'>"
         "<label>Szenen <small>id|Label;...</small></label><input name=scene_csv value='%s'>"
         "<button type=submit>Speichern</button></form></body></html>",
         PAGE_HEAD, c->mqtt_host, (unsigned)c->mqtt_port, c->mqtt_user, c->base_topic,
         c->ha_host, (unsigned)c->ha_port, c->ha_ws_url, c->weather_entity, c->bresser_prefix,
-        c->energy_csv, c->light_csv, c->scene_csv);
+        c->temp_entity, c->energy_csv, c->light_csv, c->scene_csv);
 
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, buf, (n > 0 && n < 6144) ? n : HTTPD_RESP_USE_STRLEN);
@@ -267,6 +268,7 @@ static esp_err_t post_handler(httpd_req_t *req)
     apply_secret(body, "ha_token", nc.ha_token, sizeof(nc.ha_token));
     apply_text(body, "weather_entity", nc.weather_entity, sizeof(nc.weather_entity));
     apply_text(body, "bresser_prefix", nc.bresser_prefix, sizeof(nc.bresser_prefix));
+    apply_text(body, "temp_entity", nc.temp_entity, sizeof(nc.temp_entity));
     apply_text(body, "energy_csv", nc.energy_csv, sizeof(nc.energy_csv));
     apply_text(body, "light_csv", nc.light_csv, sizeof(nc.light_csv));
     apply_text(body, "scene_csv", nc.scene_csv, sizeof(nc.scene_csv));

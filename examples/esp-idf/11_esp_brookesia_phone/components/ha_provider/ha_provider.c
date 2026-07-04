@@ -30,6 +30,7 @@ static char s_base[96];            /* "http://host:port" */
 static char s_auth[300];           /* "Bearer <token>" */
 static char s_bresser[64];         /* Bresser-Prefix */
 static char s_weather_entity[64];
+static char s_temp_entity[64];     /* separate Temperatur-Quelle (optional) */
 
 static void lock(void)   { if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY); }
 static void unlock(void) { if (s_lock) xSemaphoreGive(s_lock); }
@@ -104,8 +105,14 @@ static void poll_once(void)
             any = true;
         }
     }
+    /* Temperatur: separate Entity bevorzugt (z.B. sensor.aussentemperatur_min), sonst Bresser */
+    if (s_temp_entity[0]) {
+        char ts[32];
+        if (fetch_state(s_temp_entity, ts, sizeof(ts))) { w.temperature = strtof(ts, NULL); w.has_temperature = true; any = true; }
+    } else if (s_bresser[0]) {
+        if (fetch_bresser_float("temperatur", &f)) { w.temperature = f; w.has_temperature = true; any = true; }
+    }
     if (s_bresser[0]) {
-        if (fetch_bresser_float("temperatur",  &f)) { w.temperature = f; w.has_temperature = true; any = true; }
         if (fetch_bresser_float("luftfeuchte",  &f)) { w.humidity    = f; w.has_humidity    = true; any = true; }
         if (fetch_bresser_float("wind",         &f)) { w.wind_speed  = f; w.has_wind        = true; any = true; }
         if (fetch_bresser_float("regenrate",    &f)) { w.rain_rate   = f; w.has_rain        = true; any = true; }
@@ -152,6 +159,7 @@ esp_err_t ha_provider_start(void)
     snprintf(s_auth, sizeof(s_auth), "Bearer %s", cfg->ha_token);
     snprintf(s_bresser, sizeof(s_bresser), "%s", cfg->bresser_prefix);
     snprintf(s_weather_entity, sizeof(s_weather_entity), "%s", cfg->weather_entity);
+    snprintf(s_temp_entity, sizeof(s_temp_entity), "%s", cfg->temp_entity);
 
     if (!s_lock) {
         s_lock = xSemaphoreCreateMutex();

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define HA_CFG_VERSION 2
+#define HA_CFG_VERSION 3
 
 typedef struct {
     uint8_t  version;
@@ -39,6 +39,7 @@ typedef struct {
     /* Entity-Mapping */
     char     weather_entity[64]; /* Zustand + Forecast, z.B. weather.forecast_home_2 */
     char     bresser_prefix[64]; /* aktuelle Werte, z.B. sensor.bresser_weather_0000240e_ch_0 */
+    char     temp_entity[64];    /* separate Temperatur-Quelle, z.B. sensor.aussentemperatur_min */
     char     energy_csv[192];
     char     light_csv[192];
     char     scene_csv[192];
