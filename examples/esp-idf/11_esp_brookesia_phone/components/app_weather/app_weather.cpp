@@ -249,8 +249,8 @@ bool AppWeather::run(void)
     const int   whi[7] = {24, 22, 19, 18, 25, 26, 21};
     const int   wlo[7] = {14, 15, 13, 12, 16, 17, 15};
     for (int i = 0; i < 7; i++) {
-        int x = i * 180;
-        lv_obj_t *dc = mk_panel(wk, x, 34, 168, 150);
+        int x = 6 + i * 176;   /* 7x164 + 6x12 = 1220, in 1232px zentriert (6px Rand) */
+        lv_obj_t *dc = mk_panel(wk, x, 34, 164, 150);
         lv_obj_set_style_bg_color(dc, lv_color_hex(COL_INNER), 0);
         mk_label(dc, wd[i], &lv_font_montserrat_20, COL_TXT, 0, 0);
         char hi[8]; snprintf(hi, sizeof(hi), "%d", whi[i]);
