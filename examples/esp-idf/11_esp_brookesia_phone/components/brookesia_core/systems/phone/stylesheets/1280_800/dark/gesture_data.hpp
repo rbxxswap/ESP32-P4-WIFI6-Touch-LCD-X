@@ -22,8 +22,8 @@ constexpr Gesture::IndicatorBarData STYLESHEET_1280_800_DARK_GESTURE_LEFT_RIGHT_
         .color = gui::StyleColor::COLOR(0xFFFFFF),
     },
     .animation = {
-        .scale_back_path_type = gui::StyleAnimation::ANIM_PATH_TYPE_BOUNCE,
-        .scale_back_time_ms = 500,
+        .scale_back_path_type = gui::StyleAnimation::ANIM_PATH_TYPE_EASE_OUT,
+        .scale_back_time_ms = 250,
     },
 };
 
@@ -40,8 +40,8 @@ constexpr Gesture::IndicatorBarData STYLESHEET_1280_800_DARK_GESTURE_BOTTOM_INDI
         .color = gui::StyleColor::COLOR(0xFFFFFF),
     },
     .animation = {
-        .scale_back_path_type = gui::StyleAnimation::ANIM_PATH_TYPE_BOUNCE,
-        .scale_back_time_ms = 500,
+        .scale_back_path_type = gui::StyleAnimation::ANIM_PATH_TYPE_EASE_OUT,
+        .scale_back_time_ms = 250,
     },
 };
 
