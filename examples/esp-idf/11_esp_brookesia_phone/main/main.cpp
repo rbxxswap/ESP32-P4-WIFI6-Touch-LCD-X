@@ -11,6 +11,7 @@ extern "C" {
 #include "wifi_helper.h"
 #include "ota_updater.h"
 #include "ha_config.h"
+#include "ha_provider.h"
 }
 #ifdef ESP_UTILS_LOG_TAG
 #undef ESP_UTILS_LOG_TAG
@@ -169,6 +170,7 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
                 ESP_UTILS_LOGI("WiFi connected, init OTA + HA-Config-Webserver");
                 ota_updater_init_from_nvs();
                 ha_config_start_web();
+                ha_provider_start();   /* MQTT-Lesepfad (No-op wenn kein Broker konfiguriert) */
             } else {
                 ESP_UTILS_LOGW("WiFi connect failed, no OTA/Config-Web");
             }

@@ -6,7 +6,7 @@ file(GLOB_RECURSE PROJ_SRCS_CPP ${PROJ_SRC}/*.cpp)
 idf_component_register(
     SRCS  ${PROJ_SRCS_C} ${PROJ_SRCS_CPP}
     INCLUDE_DIRS ${PROJ_SRC}
-    REQUIRES brookesia_core
+    REQUIRES brookesia_core ha_provider
     WHOLE_ARCHIVE
 )
 
