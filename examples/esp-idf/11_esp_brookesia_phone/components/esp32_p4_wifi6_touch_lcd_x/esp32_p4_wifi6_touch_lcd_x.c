@@ -1263,7 +1263,7 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
             .ver_res = BSP_LCD_V_RES,
             .buffer_height = 50,
             .use_psram = false,
-            .enable_ppa_accel = false,
+            .enable_ppa_accel = (cfg->rotation != ESP_LV_ADAPTER_ROTATE_0),   /* PPA-HW-Rotation nur wenn gedreht -> entlastet CPU */
             .require_double_buffer = false,
         },
         .tear_avoid_mode = cfg->tear_avoid_mode,

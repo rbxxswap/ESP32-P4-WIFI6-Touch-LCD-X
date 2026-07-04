@@ -41,8 +41,6 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
             .mirror_x = 1,       /* ggf. on-device kalibrieren: mirror_x/mirror_y tauschen */
             .mirror_y = 0}};
 
-    cfg.lv_adapter_cfg.enable_ppa_accel = true;   /* Rotation per PPA-Hardware statt CPU -> deutlich fluessiger */
-
     ESP_UTILS_CHECK_NULL_EXIT(bsp_display_start_with_config(&cfg), "Start display failed");
     ESP_UTILS_CHECK_ERROR_EXIT(bsp_display_backlight_on(), "Turn on display backlight failed");
 
