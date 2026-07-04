@@ -20,7 +20,7 @@ static volatile bool            s_connected = false;
 
 static ha_weather_t s_weather;                 /* geschuetzt durch s_lock */
 static char         s_sub_topic[48];           /* "<base>/#" */
-static char         s_wx_prefix[80];           /* "<base>/weather/<object>/" */
+static char         s_wx_prefix[128];          /* "<base>/weather/<object>/" (gross genug fuer Werror=format-truncation) */
 static size_t       s_wx_prefix_len = 0;
 
 /* ---- Hilfen ---- */
