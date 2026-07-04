@@ -18,23 +18,24 @@
 #include "freertos/semphr.h"
 #include "esp_http_client.h"
 #include "esp_heap_caps.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "cJSON.h"
 
 static const char *TAG = "ha_provider";
 
 static SemaphoreHandle_t s_lock;
-static ha_weather_t      s_weather;             /* geschuetzt durch s_lock */
-static ha_forecast_t     s_fc;                  /* geschuetzt durch s_lock */
+static EXT_RAM_BSS_ATTR ha_weather_t  s_weather;   /* PSRAM, geschuetzt durch s_lock */
+static EXT_RAM_BSS_ATTR ha_forecast_t s_fc;        /* PSRAM, geschuetzt durch s_lock */
 static volatile bool     s_connected;
 static volatile bool     s_started;
 
-/* Config-Snapshot beim Start */
-static char s_base[96];            /* "http://host:port" */
-static char s_auth[300];           /* "Bearer <token>" */
-static char s_bresser[64];         /* Bresser-Prefix */
-static char s_weather_entity[64];
-static char s_temp_entity[64];     /* separate Temperatur-Quelle (optional) */
+/* Config-Snapshot beim Start - im PSRAM, um internes BSS zu schonen (Boot-OOM vermeiden) */
+static EXT_RAM_BSS_ATTR char s_base[96];            /* "http://host:port" */
+static EXT_RAM_BSS_ATTR char s_auth[300];           /* "Bearer <token>" */
+static EXT_RAM_BSS_ATTR char s_bresser[64];         /* Bresser-Prefix */
+static EXT_RAM_BSS_ATTR char s_weather_entity[64];
+static EXT_RAM_BSS_ATTR char s_temp_entity[64];     /* separate Temperatur-Quelle (optional) */
 
 static void lock(void)   { if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY); }
 static void unlock(void) { if (s_lock) xSemaphoreGive(s_lock); }
@@ -180,12 +181,12 @@ static bool fetch_forecast_type(const char *type, ha_forecast_t *fc, bool hourly
     esp_http_client_set_header(cl, "Content-Type", "application/json");
 
     bool ok = false;
-    char *buf = heap_caps_malloc(16384, MALLOC_CAP_SPIRAM);
+    char *buf = heap_caps_malloc(24576, MALLOC_CAP_SPIRAM);
     if (buf && esp_http_client_open(cl, strlen(body)) == ESP_OK) {
         esp_http_client_write(cl, body, strlen(body));
         esp_http_client_fetch_headers(cl);
         int status = esp_http_client_get_status_code(cl);
-        int r = esp_http_client_read_response(cl, buf, 16383);
+        int r = esp_http_client_read_response(cl, buf, 24575);
         if (status == 200 && r > 0) {
             buf[r] = 0;
             cJSON *root = cJSON_Parse(buf);
