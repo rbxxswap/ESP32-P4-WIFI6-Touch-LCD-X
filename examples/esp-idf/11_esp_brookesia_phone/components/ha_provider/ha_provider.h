@@ -51,6 +51,31 @@ bool ha_provider_get_weather(ha_weather_t *out);
 /** true, wenn der letzte REST-Poll erfolgreich war. */
 bool ha_provider_is_connected(void);
 
+/* ---- Forecast (Stufe B, aus weather_entity via get_forecasts) ---- */
+
+typedef struct {
+    bool  used;
+    int   hour;         /* lokale Stunde 0-23 */
+    float temp;
+} ha_hourly_t;
+
+typedef struct {
+    bool  used;
+    int   wday;         /* 0=So .. 6=Sa (lokal) */
+    float hi;
+    float lo;
+} ha_daily_t;
+
+typedef struct {
+    bool        valid;
+    uint32_t    revision;
+    ha_hourly_t hourly[8];
+    ha_daily_t  daily[7];
+} ha_forecast_t;
+
+/** Kopiert den Forecast-Snapshot threadsafe. Rueckgabe = out->valid. */
+bool ha_provider_get_forecast(ha_forecast_t *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -10,11 +10,14 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_http_client.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "cJSON.h"
 
@@ -22,6 +25,7 @@ static const char *TAG = "ha_provider";
 
 static SemaphoreHandle_t s_lock;
 static ha_weather_t      s_weather;             /* geschuetzt durch s_lock */
+static ha_forecast_t     s_fc;                  /* geschuetzt durch s_lock */
 static volatile bool     s_connected;
 static volatile bool     s_started;
 
@@ -134,12 +138,117 @@ static void poll_once(void)
     }
 }
 
+/* ISO-8601 (UTC, "2026-07-05T10:00:00+00:00") -> epoch */
+static time_t parse_iso_utc(const char *s)
+{
+    if (!s) return 0;
+    int Y, M, D, h, mi, se = 0;
+    if (sscanf(s, "%d-%d-%dT%d:%d:%d", &Y, &M, &D, &h, &mi, &se) >= 5) {
+        struct tm tmv = {0};
+        tmv.tm_year = Y - 1900; tmv.tm_mon = M - 1; tmv.tm_mday = D;
+        tmv.tm_hour = h; tmv.tm_min = mi; tmv.tm_sec = se;
+        return timegm(&tmv);
+    }
+    return 0;
+}
+
+/* POST get_forecasts (type=daily|hourly), Antwort parsen -> fc fuellen. */
+static bool fetch_forecast_type(const char *type, ha_forecast_t *fc, bool hourly)
+{
+    char url[200];
+    snprintf(url, sizeof(url), "%s/api/services/weather/get_forecasts?return_response", s_base);
+    char body[160];
+    snprintf(body, sizeof(body), "{\"entity_id\":\"%s\",\"type\":\"%s\"}", s_weather_entity, type);
+
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 9000,
+    };
+    esp_http_client_handle_t cl = esp_http_client_init(&cfg);
+    if (!cl) return false;
+    esp_http_client_set_header(cl, "Authorization", s_auth);
+    esp_http_client_set_header(cl, "Content-Type", "application/json");
+
+    bool ok = false;
+    char *buf = heap_caps_malloc(16384, MALLOC_CAP_SPIRAM);
+    if (buf && esp_http_client_open(cl, strlen(body)) == ESP_OK) {
+        esp_http_client_write(cl, body, strlen(body));
+        esp_http_client_fetch_headers(cl);
+        int status = esp_http_client_get_status_code(cl);
+        int r = esp_http_client_read_response(cl, buf, 16383);
+        if (status == 200 && r > 0) {
+            buf[r] = 0;
+            cJSON *root = cJSON_Parse(buf);
+            if (root) {
+                cJSON *sr  = cJSON_GetObjectItem(root, "service_response");
+                cJSON *ent = sr  ? cJSON_GetObjectItem(sr, s_weather_entity) : NULL;
+                cJSON *arr = ent ? cJSON_GetObjectItem(ent, "forecast") : NULL;
+                if (cJSON_IsArray(arr)) {
+                    int idx = 0, maxn = hourly ? 8 : 7;
+                    cJSON *it = NULL;
+                    cJSON_ArrayForEach(it, arr) {
+                        if (idx >= maxn) break;
+                        cJSON *dt = cJSON_GetObjectItem(it, "datetime");
+                        cJSON *tp = cJSON_GetObjectItem(it, "temperature");
+                        time_t ep = cJSON_IsString(dt) ? parse_iso_utc(dt->valuestring) : 0;
+                        struct tm lt; localtime_r(&ep, &lt);
+                        if (hourly) {
+                            fc->hourly[idx].hour = lt.tm_hour;
+                            fc->hourly[idx].temp = cJSON_IsNumber(tp) ? (float)tp->valuedouble : 0;
+                            fc->hourly[idx].used = true;
+                        } else {
+                            cJSON *tl = cJSON_GetObjectItem(it, "templow");
+                            fc->daily[idx].wday = lt.tm_wday;
+                            fc->daily[idx].hi = cJSON_IsNumber(tp) ? (float)tp->valuedouble : 0;
+                            fc->daily[idx].lo = cJSON_IsNumber(tl) ? (float)tl->valuedouble : 0;
+                            fc->daily[idx].used = true;
+                        }
+                        idx++;
+                    }
+                    for (int k = idx; k < maxn; k++) {
+                        if (hourly) fc->hourly[k].used = false; else fc->daily[k].used = false;
+                    }
+                    ok = idx > 0;
+                }
+                cJSON_Delete(root);
+            }
+        } else {
+            ESP_LOGW(TAG, "forecast %s HTTP %d", type, status);
+        }
+    }
+    free(buf);
+    esp_http_client_close(cl);
+    esp_http_client_cleanup(cl);
+    return ok;
+}
+
+static void poll_forecast(void)
+{
+    if (!s_weather_entity[0]) return;
+    ha_forecast_t fc;
+    lock(); fc = s_fc; unlock();
+    bool changed = false;
+    if (fetch_forecast_type("hourly", &fc, true))  changed = true;
+    if (fetch_forecast_type("daily",  &fc, false)) changed = true;
+    if (changed) {
+        fc.valid = true;
+        fc.revision++;
+        lock(); s_fc = fc; unlock();
+        ESP_LOGI(TAG, "Forecast aktualisiert (hourly[0]=%dh/%.0fC, daily[0]=%.0f/%.0f)",
+                 fc.hourly[0].hour, fc.hourly[0].temp, fc.daily[0].hi, fc.daily[0].lo);
+    }
+}
+
 static void poll_task(void *arg)
 {
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(3000));     /* Netif etwas Zeit geben */
+    int cycle = 0;
     for (;;) {
         poll_once();
+        if (cycle % 30 == 0) poll_forecast();   /* sofort + alle ~15 min (30 x 30s) */
+        cycle++;
         vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }
@@ -166,6 +275,7 @@ esp_err_t ha_provider_start(void)
         if (!s_lock) return ESP_ERR_NO_MEM;
     }
     memset(&s_weather, 0, sizeof(s_weather));
+    memset(&s_fc, 0, sizeof(s_fc));
 
     s_started = true;
     if (xTaskCreate(poll_task, "ha_poll", 8192, NULL, 4, NULL) != pdPASS) {
@@ -189,4 +299,13 @@ bool ha_provider_get_weather(ha_weather_t *out)
 bool ha_provider_is_connected(void)
 {
     return s_connected;
+}
+
+bool ha_provider_get_forecast(ha_forecast_t *out)
+{
+    if (!out) return false;
+    lock();
+    *out = s_fc;
+    unlock();
+    return out->valid;
 }

@@ -94,6 +94,12 @@ static lv_obj_t   *s_lbl_humid = nullptr;
 static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr }; /* WIND, REGEN, UV, HELLIGKEIT */
 static lv_obj_t   *s_lbl_datetime = nullptr;
 static lv_obj_t   *s_img_cond     = nullptr;
+static lv_obj_t   *s_lbl_hour[8]  = {0};   /* stuendliche Reihe: Stunde */
+static lv_obj_t   *s_lbl_htemp[8] = {0};   /* stuendliche Reihe: Temp */
+static lv_obj_t   *s_lbl_dwd[7]   = {0};   /* 7-Tage: Wochentag */
+static lv_obj_t   *s_lbl_dhi[7]   = {0};   /* 7-Tage: Hoch */
+static lv_obj_t   *s_lbl_dlo[7]   = {0};   /* 7-Tage: Tief */
+static uint32_t    s_fc_rev = 0;
 static lv_timer_t *s_wx_timer  = nullptr;
 static uint32_t    s_last_rev  = 0;
 
@@ -144,6 +150,30 @@ static void wx_update_cb(lv_timer_t *t)
         lv_label_set_text(s_lbl_datetime, db);
     }
 
+    /* Forecast (eigene Revision, unabhaengig von aktuellen Wetterdaten) */
+    ha_forecast_t fc;
+    if (ha_provider_get_forecast(&fc) && fc.revision != s_fc_rev) {
+        s_fc_rev = fc.revision;
+        char fb[16];
+        static const char *dwd[7] = {"SO", "MO", "DI", "MI", "DO", "FR", "SA"};
+        for (int i = 0; i < 8; i++) {
+            if (!fc.hourly[i].used) continue;
+            if (s_lbl_hour[i])  { snprintf(fb, sizeof(fb), "%02d", fc.hourly[i].hour); lv_label_set_text(s_lbl_hour[i], fb); }
+            if (s_lbl_htemp[i]) { snprintf(fb, sizeof(fb), "%.0f", fc.hourly[i].temp); lv_label_set_text(s_lbl_htemp[i], fb); }
+        }
+        for (int i = 0; i < 7; i++) {
+            if (fc.daily[i].used) {
+                if (s_lbl_dwd[i]) lv_label_set_text(s_lbl_dwd[i], dwd[fc.daily[i].wday % 7]);
+                if (s_lbl_dhi[i]) { snprintf(fb, sizeof(fb), "%.0f", fc.daily[i].hi); lv_label_set_text(s_lbl_dhi[i], fb); }
+                if (s_lbl_dlo[i]) { snprintf(fb, sizeof(fb), "%.0f", fc.daily[i].lo); lv_label_set_text(s_lbl_dlo[i], fb); }
+            } else {
+                if (s_lbl_dwd[i]) lv_label_set_text(s_lbl_dwd[i], "-");
+                if (s_lbl_dhi[i]) lv_label_set_text(s_lbl_dhi[i], "");
+                if (s_lbl_dlo[i]) lv_label_set_text(s_lbl_dlo[i], "");
+            }
+        }
+    }
+
     ha_weather_t w;
     if (!ha_provider_get_weather(&w)) return;   /* noch keine Live-Daten */
     if (w.revision == s_last_rev)     return;   /* nichts Neues */
@@ -190,6 +220,8 @@ static void wx_cleanup_cb(lv_event_t *e)
     s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
     s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
+    for (int i = 0; i < 8; i++) { s_lbl_hour[i] = s_lbl_htemp[i] = nullptr; }
+    for (int i = 0; i < 7; i++) { s_lbl_dwd[i] = s_lbl_dhi[i] = s_lbl_dlo[i] = nullptr; }
 }
 
 bool AppWeather::run(void)
@@ -227,9 +259,9 @@ bool AppWeather::run(void)
     const int   htemp[8] = {23, 24, 23, 21, 20, 19, 18, 17};
     for (int i = 0; i < 8; i++) {
         int x = i * 94;
-        mk_label(hr, hours[i], &lv_font_montserrat_16, COL_TXT2, x + 10, 40);
+        s_lbl_hour[i] = mk_label(hr, hours[i], &lv_font_montserrat_16, COL_TXT2, x + 10, 40);
         char t[8]; snprintf(t, sizeof(t), "%d", htemp[i]);
-        mk_label(hr, t, &lv_font_montserrat_24, COL_TXT, x + 10, 90);
+        s_lbl_htemp[i] = mk_label(hr, t, &lv_font_montserrat_24, COL_TXT, x + 10, 90);
     }
     esp_rom_printf("WX_HOURLY done\n");
 
@@ -252,15 +284,16 @@ bool AppWeather::run(void)
         int x = 6 + i * 176;   /* 7x164 + 6x12 = 1220, in 1232px zentriert (6px Rand) */
         lv_obj_t *dc = mk_panel(wk, x, 34, 164, 150);
         lv_obj_set_style_bg_color(dc, lv_color_hex(COL_INNER), 0);
-        mk_label(dc, wd[i], &lv_font_montserrat_20, COL_TXT, 0, 0);
+        s_lbl_dwd[i] = mk_label(dc, wd[i], &lv_font_montserrat_20, COL_TXT, 0, 0);
         char hi[8]; snprintf(hi, sizeof(hi), "%d", whi[i]);
-        mk_label(dc, hi, &lv_font_montserrat_28, COL_TXT, 0, 50);
+        s_lbl_dhi[i] = mk_label(dc, hi, &lv_font_montserrat_28, COL_TXT, 0, 50);
         char lo[8]; snprintf(lo, sizeof(lo), "%d", wlo[i]);
-        mk_label(dc, lo, &lv_font_montserrat_18, COL_TXT2, 0, 95);
+        s_lbl_dlo[i] = mk_label(dc, lo, &lv_font_montserrat_18, COL_TXT2, 0, 95);
     }
     /* Live-Update-Timer starten + Cleanup an Objekt-Lebensdauer koppeln */
     lv_obj_add_event_cb(cur, wx_cleanup_cb, LV_EVENT_DELETE, nullptr);
     s_last_rev = 0;
+    s_fc_rev = 0;
     s_wx_timer = lv_timer_create(wx_update_cb, 2000, nullptr);
     wx_update_cb(nullptr);   /* sofort erster Versuch, falls schon Daten da */
 
@@ -274,6 +307,8 @@ bool AppWeather::back(void)
     s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
     s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
+    for (int i = 0; i < 8; i++) { s_lbl_hour[i] = s_lbl_htemp[i] = nullptr; }
+    for (int i = 0; i < 7; i++) { s_lbl_dwd[i] = s_lbl_dhi[i] = s_lbl_dlo[i] = nullptr; }
     ESP_UTILS_CHECK_FALSE_RETURN(notifyCoreClosed(), false, "Notify core closed failed");
     return true;
 }
