@@ -33,6 +33,8 @@ static lv_obj_t *s_pw_panel    = nullptr;   /* Overlay: Passwort-Eingabe */
 static lv_obj_t *s_pw_ssid_lbl = nullptr;
 static lv_obj_t *s_pw_textarea = nullptr;
 static lv_obj_t *s_pw_keyboard = nullptr;
+static lv_obj_t *s_pw_status_lbl = nullptr;   /* sichtbares Feedback direkt im Panel */
+static volatile bool s_connecting = false;    /* verhindert parallele Connect-Tasks */
 
 /* Scan-Ergebnisse (vom Task gefuellt, im LVGL-Kontext gelesen) */
 static wifi_scan_result_t s_results[WIFI_MAX_RESULTS];
@@ -108,9 +110,19 @@ static void scan_btn_cb(lv_event_t *e)
 static void apply_connect_result(void *arg)
 {
     bool ok = (arg != nullptr);
+    s_connecting = false;
     if (s_status_lbl) {
         if (ok) lv_label_set_text_fmt(s_status_lbl, "Connected: %s", s_sel_ssid);
         else    lv_label_set_text(s_status_lbl, "Connect failed");
+    }
+    if (s_pw_status_lbl) {
+        if (ok) {
+            lv_obj_set_style_text_color(s_pw_status_lbl, lv_color_hex(0x36C275), 0);
+            lv_label_set_text_fmt(s_pw_status_lbl, LV_SYMBOL_OK " Verbunden mit %s", s_sel_ssid);
+        } else {
+            lv_obj_set_style_text_color(s_pw_status_lbl, lv_color_hex(0xD05050), 0);
+            lv_label_set_text(s_pw_status_lbl, LV_SYMBOL_CLOSE " Fehlgeschlagen - Passwort pruefen");
+        }
     }
     if (ok && s_pw_panel) lv_obj_add_flag(s_pw_panel, LV_OBJ_FLAG_HIDDEN);
 }
@@ -137,6 +149,8 @@ static void on_net_clicked(lv_event_t *e)
 
     if (s_pw_ssid_lbl) lv_label_set_text_fmt(s_pw_ssid_lbl, "Password for: %s", s_sel_ssid);
     if (s_pw_textarea) lv_textarea_set_text(s_pw_textarea, "");
+    if (s_pw_status_lbl) lv_label_set_text(s_pw_status_lbl, "");
+    s_connecting = false;
     if (s_pw_panel)    lv_obj_clear_flag(s_pw_panel, LV_OBJ_FLAG_HIDDEN);
     if (s_pw_keyboard && s_pw_textarea) lv_keyboard_set_textarea(s_pw_keyboard, s_pw_textarea);
 }
@@ -145,10 +159,20 @@ static void on_net_clicked(lv_event_t *e)
 static void do_connect(void)
 {
     if (!s_pw_textarea) return;
+    if (s_connecting) return;               /* es laeuft schon ein Versuch */
+    s_connecting = true;
     const char *txt = lv_textarea_get_text(s_pw_textarea);
     char *pw = strdup(txt ? txt : "");
     if (s_status_lbl) lv_label_set_text_fmt(s_status_lbl, "Connecting to %s...", s_sel_ssid);
-    xTaskCreate(connect_task, "wifi_conn", 6144, pw, 5, NULL);
+    if (s_pw_status_lbl) {
+        lv_obj_set_style_text_color(s_pw_status_lbl, lv_color_hex(0xE0B020), 0);
+        lv_label_set_text_fmt(s_pw_status_lbl, LV_SYMBOL_REFRESH " Verbinde mit %s ...", s_sel_ssid);
+    }
+    if (xTaskCreate(connect_task, "wifi_conn", 6144, pw, 5, NULL) != pdPASS) {
+        free(pw);
+        s_connecting = false;
+        if (s_pw_status_lbl) lv_label_set_text(s_pw_status_lbl, "Task-Fehler");
+    }
 }
 
 /* Keyboard feuert LV_EVENT_READY beim Haken (OK) und LV_EVENT_CANCEL beim X.
@@ -234,6 +258,11 @@ void app_settings_wifi_section_create(lv_obj_t *parent)
     lv_obj_t *connect_lbl = lv_label_create(connect_btn);
     lv_label_set_text(connect_lbl, LV_SYMBOL_OK " Verbinden");
     lv_obj_center(connect_lbl);
+
+    /* Sichtbare Statuszeile im Panel (nicht mehr hinter dem Overlay versteckt) */
+    s_pw_status_lbl = lv_label_create(s_pw_panel);
+    lv_label_set_text(s_pw_status_lbl, "");
+    lv_obj_align(s_pw_status_lbl, LV_ALIGN_TOP_LEFT, 0, 160);
 
     s_pw_keyboard = lv_keyboard_create(s_pw_panel);
     lv_obj_set_size(s_pw_keyboard, lv_pct(100), lv_pct(50));

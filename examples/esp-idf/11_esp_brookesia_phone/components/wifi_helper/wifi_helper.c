@@ -145,6 +145,14 @@ esp_err_t wifi_helper_start_blocking(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* Reconnect-Fall: Steht schon eine Verbindung, muss sie getrennt und mit
+     * der neuen SSID/PW neu aufgebaut werden - sonst laeuft der Wait unten ins
+     * Timeout, weil ohne STA_START-Event kein neuer Connect ausgeloest wird. */
+    if (s_connected) {
+        esp_wifi_disconnect();
+        esp_wifi_connect();
+    }
+
     TickType_t timeout = pdMS_TO_TICKS(CONFIG_WIFI_HELPER_CONNECT_TIMEOUT_SEC * 1000);
     EventBits_t bits = xEventGroupWaitBits(s_wifi_events,
                                            WIFI_BIT_CONNECTED | WIFI_BIT_FAIL,
