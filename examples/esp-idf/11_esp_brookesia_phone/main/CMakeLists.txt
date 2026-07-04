@@ -6,9 +6,6 @@ idf_component_register(
 
 target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-missing-field-initializers)
 
-# PPA-Rotation braucht mehr offene Transaktionen als Default (8) - sonst Abbruch beim Fill
-idf_build_set_property(COMPILE_DEFINITIONS "LVGL_PORT_PPA_MAX_PENDING_TRANS=32" APPEND)
-
 # Function to get component library
 function(get_component_library component_name output_var)
     # Get the exact component name
