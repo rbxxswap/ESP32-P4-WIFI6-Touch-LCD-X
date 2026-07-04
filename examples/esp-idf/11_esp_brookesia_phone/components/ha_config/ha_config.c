@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "nvs.h"
+#include "nvs_flash.h"
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_attr.h"
@@ -33,9 +34,20 @@ static void set_defaults(ha_config_t *c)
     strncpy(c->base_topic, "ha_display", sizeof(c->base_topic) - 1);
 }
 
+/* NVS sicher initialisieren - ha_config_load() laeuft evtl. vor wifi_helper_init(). */
+static void ensure_nvs(void)
+{
+    esp_err_t e = nvs_flash_init();
+    if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        nvs_flash_init();
+    }
+}
+
 esp_err_t ha_config_load(void)
 {
     set_defaults(&s_cfg);
+    ensure_nvs();
 
     nvs_handle_t h;
     esp_err_t err = nvs_open(HA_NVS_NS, NVS_READONLY, &h);
@@ -67,6 +79,7 @@ const ha_config_t *ha_config_get(void)
 esp_err_t ha_config_save(const ha_config_t *cfg)
 {
     if (!cfg) return ESP_ERR_INVALID_ARG;
+    ensure_nvs();
 
     nvs_handle_t h;
     esp_err_t err = nvs_open(HA_NVS_NS, NVS_READWRITE, &h);
