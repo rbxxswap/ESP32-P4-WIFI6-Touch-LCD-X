@@ -61,8 +61,7 @@ static bool fetch_state(const char *entity, char *out, size_t outsz)
             if (root) {
                 cJSON *st = cJSON_GetObjectItem(root, "state");
                 if (cJSON_IsString(st) && st->valuestring) {
-                    strncpy(out, st->valuestring, outsz - 1);
-                    out[outsz - 1] = 0;
+                    snprintf(out, outsz, "%s", st->valuestring);
                     ok = strcmp(out, "unknown") != 0 && strcmp(out, "unavailable") != 0;
                 }
                 cJSON_Delete(root);
@@ -101,8 +100,7 @@ static void poll_once(void)
     if (s_weather_entity[0]) {
         char cond[24];
         if (fetch_state(s_weather_entity, cond, sizeof(cond))) {
-            strncpy(w.condition, cond, sizeof(w.condition) - 1);
-            w.condition[sizeof(w.condition) - 1] = 0;
+            snprintf(w.condition, sizeof(w.condition), "%s", cond);
             any = true;
         }
     }
@@ -152,8 +150,8 @@ esp_err_t ha_provider_start(void)
     uint16_t port = cfg->ha_port ? cfg->ha_port : 8123;
     snprintf(s_base, sizeof(s_base), "http://%s:%u", cfg->ha_host, (unsigned)port);
     snprintf(s_auth, sizeof(s_auth), "Bearer %s", cfg->ha_token);
-    strncpy(s_bresser, cfg->bresser_prefix, sizeof(s_bresser) - 1);
-    strncpy(s_weather_entity, cfg->weather_entity, sizeof(s_weather_entity) - 1);
+    snprintf(s_bresser, sizeof(s_bresser), "%s", cfg->bresser_prefix);
+    snprintf(s_weather_entity, sizeof(s_weather_entity), "%s", cfg->weather_entity);
 
     if (!s_lock) {
         s_lock = xSemaphoreCreateMutex();
