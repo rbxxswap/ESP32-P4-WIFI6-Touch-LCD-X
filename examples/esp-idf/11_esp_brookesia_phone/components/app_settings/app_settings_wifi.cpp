@@ -141,18 +141,33 @@ static void on_net_clicked(lv_event_t *e)
     if (s_pw_keyboard && s_pw_textarea) lv_keyboard_set_textarea(s_pw_keyboard, s_pw_textarea);
 }
 
-/* Keyboard-Event: Ready/OK-Button (Index 39) loest Connect aus, Cancel schliesst */
+/* Passwort abschicken + Connect-Task starten */
+static void do_connect(void)
+{
+    if (!s_pw_textarea) return;
+    const char *txt = lv_textarea_get_text(s_pw_textarea);
+    char *pw = strdup(txt ? txt : "");
+    if (s_status_lbl) lv_label_set_text_fmt(s_status_lbl, "Connecting to %s...", s_sel_ssid);
+    xTaskCreate(connect_task, "wifi_conn", 6144, pw, 5, NULL);
+}
+
+/* Keyboard feuert LV_EVENT_READY beim Haken (OK) und LV_EVENT_CANCEL beim X.
+ * Der alte Index-39-Trick war LVGL-v9-fragil und hat nie ausgeloest. */
 static void keyboard_cb(lv_event_t *e)
 {
-    lv_obj_t *kb = (lv_obj_t *)lv_event_get_target(e);
-    uint32_t btn = lv_keyboard_get_selected_btn(kb);
-    /* Index 39 = Ready/OK in der Standard-Keyboard-Map (wie 13er-Demo) */
-    if (btn == 39) {
-        const char *txt = lv_textarea_get_text(s_pw_textarea);
-        char *pw = strdup(txt ? txt : "");
-        if (s_status_lbl) lv_label_set_text_fmt(s_status_lbl, "Connecting to %s...", s_sel_ssid);
-        xTaskCreate(connect_task, "wifi_conn", 6144, pw, 5, NULL);
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_READY) {
+        do_connect();
+    } else if (code == LV_EVENT_CANCEL) {
+        if (s_pw_panel) lv_obj_add_flag(s_pw_panel, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+/* Expliziter Verbinden-Button (zuverlaessig, unabhaengig von der Tastatur) */
+static void connect_btn_cb(lv_event_t *e)
+{
+    LV_UNUSED(e);
+    do_connect();
 }
 
 static void pw_cancel_cb(lv_event_t *e)
@@ -211,9 +226,18 @@ void app_settings_wifi_section_create(lv_obj_t *parent)
     lv_label_set_text(cancel_lbl, LV_SYMBOL_CLOSE " Cancel");
     lv_obj_center(cancel_lbl);
 
+    /* Expliziter Verbinden-Button unter dem Textfeld (ueber der Tastatur) */
+    lv_obj_t *connect_btn = lv_btn_create(s_pw_panel);
+    lv_obj_set_size(connect_btn, 200, 50);
+    lv_obj_align(connect_btn, LV_ALIGN_TOP_LEFT, 0, 100);
+    lv_obj_add_event_cb(connect_btn, connect_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *connect_lbl = lv_label_create(connect_btn);
+    lv_label_set_text(connect_lbl, LV_SYMBOL_OK " Verbinden");
+    lv_obj_center(connect_lbl);
+
     s_pw_keyboard = lv_keyboard_create(s_pw_panel);
     lv_obj_set_size(s_pw_keyboard, lv_pct(100), lv_pct(50));
     lv_obj_align(s_pw_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_keyboard_set_textarea(s_pw_keyboard, s_pw_textarea);
-    lv_obj_add_event_cb(s_pw_keyboard, keyboard_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_pw_keyboard, keyboard_cb, LV_EVENT_ALL, NULL);
 }
