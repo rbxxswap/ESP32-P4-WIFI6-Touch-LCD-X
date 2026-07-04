@@ -7,11 +7,14 @@
 #include "bsp/esp-bsp.h"
 #include "esp_brookesia.hpp"
 #include "boost/thread.hpp"
+#include <ctime>
+#include <cstdlib>
 extern "C" {
 #include "wifi_helper.h"
 #include "ota_updater.h"
 #include "ha_config.h"
 #include "ha_provider.h"
+#include "esp_netif_sntp.h"
 }
 #ifdef ESP_UTILS_LOG_TAG
 #undef ESP_UTILS_LOG_TAG
@@ -170,7 +173,14 @@ If you need to use the three-cache anti-tear configuration, you need to fix idf 
                 ESP_UTILS_LOGI("WiFi connected, init OTA + HA-Config-Webserver");
                 ota_updater_init_from_nvs();
                 ha_config_start_web();
-                ha_provider_start();   /* MQTT-Lesepfad (No-op wenn kein Broker konfiguriert) */
+                ha_provider_start();   /* HA-REST-Lesepfad (No-op wenn kein Host/Token konfiguriert) */
+                /* Echte Zeit per SNTP, Zeitzone Deutschland (CET/CEST) */
+                setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+                tzset();
+                {
+                    esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+                    esp_netif_sntp_init(&sntp_cfg);
+                }
             } else {
                 ESP_UTILS_LOGW("WiFi connect failed, no OTA/Config-Web");
             }

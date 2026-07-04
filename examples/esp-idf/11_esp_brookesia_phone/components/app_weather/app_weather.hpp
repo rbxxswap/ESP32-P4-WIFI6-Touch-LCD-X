@@ -19,7 +19,7 @@ namespace esp_brookesia::apps {
 
 class AppWeather: public systems::phone::App {
 public:
-    static AppWeather *requestInstance(bool use_status_bar = true, bool use_navigation_bar = true);
+    static AppWeather *requestInstance(bool use_status_bar = false, bool use_navigation_bar = false);
     ~AppWeather();
 
     using systems::phone::App::startRecordResource;

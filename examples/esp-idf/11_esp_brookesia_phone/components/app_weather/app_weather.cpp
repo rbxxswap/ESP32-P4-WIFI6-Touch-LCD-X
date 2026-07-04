@@ -13,6 +13,7 @@
 #include "esp_rom_sys.h"
 #include "app_weather.hpp"
 #include <cstring>
+#include <ctime>
 extern "C" {
 #include "ha_provider.h"
 }
@@ -32,6 +33,12 @@ using namespace esp_brookesia::gui;
 using namespace esp_brookesia::systems;
 
 LV_IMG_DECLARE(app_weather_icon_112_112);
+LV_IMG_DECLARE(wicon_sun);
+LV_IMG_DECLARE(wicon_moon);
+LV_IMG_DECLARE(wicon_partly);
+LV_IMG_DECLARE(wicon_cloud);
+LV_IMG_DECLARE(wicon_rain);
+LV_IMG_DECLARE(wicon_storm);
 
 namespace esp_brookesia::apps {
 
@@ -85,6 +92,8 @@ static lv_obj_t   *s_lbl_temp  = nullptr;
 static lv_obj_t   *s_lbl_cond  = nullptr;
 static lv_obj_t   *s_lbl_humid = nullptr;
 static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr }; /* WIND, REGEN, UV, HELLIGKEIT */
+static lv_obj_t   *s_lbl_datetime = nullptr;
+static lv_obj_t   *s_img_cond     = nullptr;
 static lv_timer_t *s_wx_timer  = nullptr;
 static uint32_t    s_last_rev  = 0;
 
@@ -105,10 +114,36 @@ static const char *cond_to_de(const char *c)
     return c;   /* unbekannt: roh anzeigen */
 }
 
+/* HA-weather-state -> Icon-Asset */
+static const lv_image_dsc_t *cond_to_icon(const char *c)
+{
+    if (!c || !c[0])                                              return &wicon_cloud;
+    if (!strcmp(c, "sunny"))                                      return &wicon_sun;
+    if (!strcmp(c, "clear-night"))                                return &wicon_moon;
+    if (!strcmp(c, "partlycloudy"))                               return &wicon_partly;
+    if (!strcmp(c, "rainy") || !strcmp(c, "pouring"))             return &wicon_rain;
+    if (!strcmp(c, "lightning") || !strcmp(c, "lightning-rainy")) return &wicon_storm;
+    return &wicon_cloud;
+}
+
 /* Poll-Timer: uebernimmt neue Werte aus ha_provider in die Labels */
 static void wx_update_cb(lv_timer_t *t)
 {
     (void)t;
+    /* Uhr + Datum immer aktualisieren (unabhaengig von neuen Wetterdaten) */
+    if (s_lbl_datetime) {
+        time_t now; struct tm tmv;
+        time(&now); localtime_r(&now, &tmv);
+        static const char *wd[7]  = {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
+        static const char *mo[12] = {"Januar", "Februar", "Maerz", "April", "Mai", "Juni",
+                                     "Juli", "August", "September", "Oktober", "November", "Dezember"};
+        char db[48];
+        snprintf(db, sizeof(db), "%02d:%02d   %s, %d. %s %d",
+                 tmv.tm_hour, tmv.tm_min, wd[tmv.tm_wday % 7], tmv.tm_mday,
+                 mo[tmv.tm_mon % 12], tmv.tm_year + 1900);
+        lv_label_set_text(s_lbl_datetime, db);
+    }
+
     ha_weather_t w;
     if (!ha_provider_get_weather(&w)) return;   /* noch keine Live-Daten */
     if (w.revision == s_last_rev)     return;   /* nichts Neues */
@@ -121,6 +156,9 @@ static void wx_update_cb(lv_timer_t *t)
     }
     if (s_lbl_cond && w.condition[0]) {
         lv_label_set_text(s_lbl_cond, cond_to_de(w.condition));
+    }
+    if (s_img_cond && w.condition[0]) {
+        lv_image_set_src(s_img_cond, cond_to_icon(w.condition));
     }
     if (w.has_humidity && s_lbl_humid) {
         snprintf(buf, sizeof(buf), "%.0f %%", w.humidity);
@@ -150,6 +188,7 @@ static void wx_cleanup_cb(lv_event_t *e)
     (void)e;
     if (s_wx_timer) { lv_timer_delete(s_wx_timer); s_wx_timer = nullptr; }
     s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
+    s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
 }
 
@@ -165,11 +204,14 @@ bool AppWeather::run(void)
     esp_rom_printf("WX_ROOT done\n");
 
     lv_obj_t *top = mk_panel(root, 0, 0, 1256, 44);
-    mk_label(top, "12:42   Sa, 25. Mai 2024", &lv_font_montserrat_16, COL_TXT, 0, 2);
-    mk_label(top, "Hannover, DE", &lv_font_montserrat_16, COL_TXT2, 1040, 2);
+    s_lbl_datetime = mk_label(top, "--:--", &lv_font_montserrat_16, COL_TXT, 0, 2);
+    mk_label(top, "Kiel, DE", &lv_font_montserrat_16, COL_TXT2, 1120, 2);
 
     lv_obj_t *cur = mk_panel(root, 0, 66, 470, 300);
     mk_label(cur, "AKTUELL", &lv_font_montserrat_14, COL_RAIN, 0, 0);
+    s_img_cond = lv_image_create(cur);
+    lv_image_set_src(s_img_cond, &wicon_cloud);
+    lv_obj_set_pos(s_img_cond, 300, 24);
     s_lbl_temp = mk_label(cur, "21.4 C", &lv_font_montserrat_44, COL_TXT, 0, 50);
     s_lbl_cond = mk_label(cur, "Meist sonnig", &lv_font_montserrat_24, COL_TXT, 0, 140);
     mk_label(cur, "Gefuehlt 24.0 C", &lv_font_montserrat_16, COL_TXT2, 0, 180);
@@ -230,6 +272,7 @@ bool AppWeather::back(void)
 {
     if (s_wx_timer) { lv_timer_delete(s_wx_timer); s_wx_timer = nullptr; }
     s_lbl_temp = s_lbl_cond = s_lbl_humid = nullptr;
+    s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
     ESP_UTILS_CHECK_FALSE_RETURN(notifyCoreClosed(), false, "Notify core closed failed");
     return true;
