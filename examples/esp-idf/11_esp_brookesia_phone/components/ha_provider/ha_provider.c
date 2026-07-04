@@ -138,16 +138,25 @@ static void poll_once(void)
     }
 }
 
+/* Tage seit 1970-01-01 (Howard Hinnant days_from_civil) - Ersatz fuer fehlendes timegm */
+static long days_from_civil(int y, int m, int d)
+{
+    y -= m <= 2;
+    long era = (y >= 0 ? y : y - 399) / 400;
+    unsigned yoe = (unsigned)(y - era * 400);
+    unsigned doy = (153u * (unsigned)(m + (m > 2 ? -3 : 9)) + 2u) / 5u + (unsigned)d - 1u;
+    unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+    return era * 146097L + (long)doe - 719468L;
+}
+
 /* ISO-8601 (UTC, "2026-07-05T10:00:00+00:00") -> epoch */
 static time_t parse_iso_utc(const char *s)
 {
     if (!s) return 0;
     int Y, M, D, h, mi, se = 0;
     if (sscanf(s, "%d-%d-%dT%d:%d:%d", &Y, &M, &D, &h, &mi, &se) >= 5) {
-        struct tm tmv = {0};
-        tmv.tm_year = Y - 1900; tmv.tm_mon = M - 1; tmv.tm_mday = D;
-        tmv.tm_hour = h; tmv.tm_min = mi; tmv.tm_sec = se;
-        return timegm(&tmv);
+        long days = days_from_civil(Y, M, D);
+        return (time_t)(days * 86400L + h * 3600L + mi * 60L + se);
     }
     return 0;
 }
