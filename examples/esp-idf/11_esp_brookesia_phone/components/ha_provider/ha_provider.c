@@ -95,6 +95,8 @@ static bool fetch_bresser_float(const char *suffix, float *out)
     return false;
 }
 
+static time_t parse_iso_utc(const char *s);   /* Vorwaerts-Deklaration */
+
 /* GET /api/states/<entity> -> attributes.<attr> (String) nach out. */
 static bool fetch_attr(const char *entity, const char *attr, char *out, size_t outsz)
 {
