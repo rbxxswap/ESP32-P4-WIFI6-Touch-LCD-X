@@ -95,6 +95,50 @@ static bool fetch_bresser_float(const char *suffix, float *out)
     return false;
 }
 
+/* GET /api/states/<entity> -> attributes.<attr> (String) nach out. */
+static bool fetch_attr(const char *entity, const char *attr, char *out, size_t outsz)
+{
+    char url[288];
+    snprintf(url, sizeof(url), "%s/api/states/%s", s_base, entity);
+    esp_http_client_config_t cfg = { .url = url, .timeout_ms = 6000, .method = HTTP_METHOD_GET };
+    esp_http_client_handle_t cl = esp_http_client_init(&cfg);
+    if (!cl) return false;
+    esp_http_client_set_header(cl, "Authorization", s_auth);
+    bool ok = false;
+    char *buf = malloc(4096);
+    if (buf && esp_http_client_open(cl, 0) == ESP_OK) {
+        esp_http_client_fetch_headers(cl);
+        int status = esp_http_client_get_status_code(cl);
+        int r = esp_http_client_read_response(cl, buf, 4095);
+        if (status == 200 && r > 0) {
+            buf[r] = 0;
+            cJSON *root = cJSON_Parse(buf);
+            if (root) {
+                cJSON *at = cJSON_GetObjectItem(root, "attributes");
+                cJSON *v  = at ? cJSON_GetObjectItem(at, attr) : NULL;
+                if (cJSON_IsString(v) && v->valuestring) {
+                    snprintf(out, outsz, "%s", v->valuestring);
+                    ok = true;
+                }
+                cJSON_Delete(root);
+            }
+        }
+    }
+    free(buf);
+    esp_http_client_close(cl);
+    esp_http_client_cleanup(cl);
+    return ok;
+}
+
+/* ISO-Zeit (UTC) -> lokale "HH:MM" */
+static void iso_to_local_hhmm(const char *iso, char *out, size_t outsz)
+{
+    time_t ep = parse_iso_utc(iso);
+    if (ep == 0) { snprintf(out, outsz, "--:--"); return; }
+    struct tm lt; localtime_r(&ep, &lt);
+    snprintf(out, outsz, "%02d:%02d", lt.tm_hour, lt.tm_min);
+}
+
 static void poll_once(void)
 {
     ha_weather_t w;
@@ -125,6 +169,22 @@ static void poll_once(void)
         if (fetch_bresser_float("uv_index",     &f)) { w.uv          = f; w.has_uv          = true; any = true; }
         if (fetch_bresser_float("beleuchtung",  &f)) { w.light_lx    = f; w.has_light       = true; any = true; }
         if (fetch_bresser_float("windrichtung", &f)) { w.wind_dir    = (int)f; w.has_dir    = true; any = true; }
+        if (fetch_bresser_float("niederschlag", &f)) { w.precip_total = f;      any = true; }
+        if (fetch_bresser_float("empfang_rssi", &f)) { w.rssi = (int)f;         any = true; }
+    }
+
+    /* Batterie: gleiches Geraet, aber binary_sensor.-Domain */
+    if (s_bresser[0] && strncmp(s_bresser, "sensor.", 7) == 0) {
+        char be[96], bs[16];
+        snprintf(be, sizeof(be), "binary_sensor.%s_batterie_schwach", s_bresser + 7);
+        if (fetch_state(be, bs, sizeof(bs))) { w.batt_low = (strcmp(bs, "on") == 0); any = true; }
+    }
+
+    /* Sonnenauf-/untergang aus sun.sun */
+    {
+        char iso[40];
+        if (fetch_attr("sun.sun", "next_rising",  iso, sizeof(iso))) { iso_to_local_hhmm(iso, w.sunrise, sizeof(w.sunrise)); any = true; }
+        if (fetch_attr("sun.sun", "next_setting", iso, sizeof(iso))) { iso_to_local_hhmm(iso, w.sunset,  sizeof(w.sunset));  any = true; }
     }
 
     if (any) {
@@ -217,6 +277,8 @@ static bool fetch_forecast_type(const char *type, ha_forecast_t *fc, bool hourly
                         } else {
                             cJSON *tl = cJSON_GetObjectItem(it, "templow");
                             fc->daily[idx].wday = lt.tm_wday;
+                            fc->daily[idx].mday = lt.tm_mday;
+                            fc->daily[idx].mon  = lt.tm_mon;
                             fc->daily[idx].hi = cJSON_IsNumber(tp) ? (float)tp->valuedouble : 0;
                             fc->daily[idx].lo = cJSON_IsNumber(tl) ? (float)tl->valuedouble : 0;
                             snprintf(fc->daily[idx].cond, sizeof(fc->daily[idx].cond), "%s", cs);

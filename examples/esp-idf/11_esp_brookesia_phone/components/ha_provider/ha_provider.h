@@ -29,6 +29,11 @@ typedef struct {
     float    uv;                /* UV-Index */
     float    light_lx;          /* Beleuchtung in Lux */
     int      wind_dir;          /* Grad */
+    float    precip_total;      /* Niederschlag heute, mm */
+    int      rssi;              /* Funk-RSSI, dBm */
+    bool     batt_low;          /* Batterie schwach */
+    char     sunrise[8];        /* "05:24" (lokal) */
+    char     sunset[8];         /* "21:21" (lokal) */
     bool     has_temperature;
     bool     has_humidity;
     bool     has_wind;
@@ -66,6 +71,8 @@ typedef struct {
 typedef struct {
     bool  used;
     int   wday;         /* 0=So .. 6=Sa (lokal) */
+    int   mday;         /* Tag im Monat 1-31 */
+    int   mon;          /* Monat 0-11 */
     float hi;
     float lo;
     char  cond[20];     /* condition-Code des Tages */
