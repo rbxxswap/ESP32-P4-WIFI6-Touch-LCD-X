@@ -48,6 +48,17 @@ static const lv_image_dsc_t *CMP[8] = {
     &wxc_0, &wxc_1, &wxc_2, &wxc_3, &wxc_4, &wxc_5, &wxc_6, &wxc_7
 };
 
+LV_IMG_DECLARE(wxdrop);
+/* Segoe-UI-Semibold mit Umlauten (LVGL-Font, via lv_font_conv) */
+LV_FONT_DECLARE(seg_de_12);
+LV_FONT_DECLARE(seg_de_14);
+LV_FONT_DECLARE(seg_de_16);
+LV_FONT_DECLARE(seg_de_24);
+
+/* Inhalt (1256 breit) auf 1280x800 zentrieren */
+#define OX 12
+#define OY 7
+
 namespace esp_brookesia::apps {
 
 AppWeather *AppWeather::_instance = nullptr;
@@ -172,6 +183,28 @@ static lv_obj_t *mk_daycard(lv_obj_t *parent, int w, int h)
     return c;
 }
 
+/* Regen-Element: kleiner Tropfen + Prozentlabel (horizontal). Gibt das %-Label zurueck. */
+static lv_obj_t *mk_rain(lv_obj_t *parent, const lv_font_t *font)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_column(row, 3, 0);
+    lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *dp = lv_image_create(row);
+    lv_image_set_src(dp, &wxdrop);
+    lv_obj_t *l = lv_label_create(row);
+    lv_label_set_text(l, " ");
+    lv_obj_set_style_text_font(l, font, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(COL_RAIN), 0);
+    return l;
+}
+
 /* ---- Live-Daten aus ha_provider ---- */
 static lv_obj_t   *s_lbl_temp   = nullptr;
 static lv_obj_t   *s_lbl_cond   = nullptr;
@@ -203,8 +236,8 @@ static const char *cond_to_de(const char *c)
 {
     if (!c || !c[0]) return "--";
     if (!strcmp(c, "sunny") || !strcmp(c, "clear-night"))         return "Klar";
-    if (!strcmp(c, "partlycloudy"))                               return "Teils bewoelkt";
-    if (!strcmp(c, "cloudy"))                                     return "Bewoelkt";
+    if (!strcmp(c, "partlycloudy"))                               return "Teils bewölkt";
+    if (!strcmp(c, "cloudy"))                                     return "Bewölkt";
     if (!strcmp(c, "fog"))                                        return "Nebel";
     if (!strcmp(c, "rainy"))                                      return "Regen";
     if (!strcmp(c, "pouring"))                                    return "Starkregen";
@@ -267,7 +300,7 @@ static void wx_update_cb(lv_timer_t *t)
         time_t now; struct tm tmv;
         time(&now); localtime_r(&now, &tmv);
         static const char *wd[7]  = {"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
-        static const char *mo[12] = {"Januar", "Februar", "Maerz", "April", "Mai", "Juni",
+        static const char *mo[12] = {"Januar", "Februar", "März", "April", "Mai", "Juni",
                                      "Juli", "August", "September", "Oktober", "November", "Dezember"};
         char db[48];
         snprintf(db, sizeof(db), "%02d:%02d   %s, %d. %s %d",
@@ -285,7 +318,7 @@ static void wx_update_cb(lv_timer_t *t)
         for (int i = 0; i < 8; i++) {
             if (fc.hourly[i].used) {
                 if (s_hour_cell[i]) lv_obj_remove_flag(s_hour_cell[i], LV_OBJ_FLAG_HIDDEN);
-                if (s_lbl_hour[i])  { snprintf(fb, sizeof(fb), "%02d", fc.hourly[i].hour); lv_label_set_text(s_lbl_hour[i], fb); }
+                if (s_lbl_hour[i])  { snprintf(fb, sizeof(fb), "%02d:00", fc.hourly[i].hour); lv_label_set_text(s_lbl_hour[i], fb); }
                 if (s_img_hour[i])  lv_image_set_src(s_img_hour[i], icon_sm(fc.hourly[i].cond));
                 if (s_lbl_htemp[i]) { snprintf(fb, sizeof(fb), "%.0f°", fc.hourly[i].temp); lv_label_set_text(s_lbl_htemp[i], fb); }
                 if (s_lbl_hrain[i]) {
@@ -327,7 +360,7 @@ static void wx_update_cb(lv_timer_t *t)
     if (s_lbl_cond && w.condition[0]) lv_label_set_text(s_lbl_cond, cond_to_de(w.condition));
     if (s_img_cond && w.condition[0]) lv_image_set_src(s_img_cond, icon_lg(w.condition));
     if (s_lbl_feels && w.has_temperature) {
-        snprintf(buf, sizeof(buf), "Gefuehlt %.0f°", feels_like(w));
+        snprintf(buf, sizeof(buf), "Gefühlt %.0f°", feels_like(w));
         lv_label_set_text(s_lbl_feels, buf);
     }
     if (w.has_humidity && s_lbl_humid) {
@@ -367,50 +400,50 @@ bool AppWeather::run(void)
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
 
     /* Kopfzeile */
-    lv_obj_t *top = mk_panel(root, 0, 0, 1256, 44);
-    s_lbl_datetime = mk_label(top, "--:--", &lv_font_montserrat_16, COL_TXT, 0, 2);
-    mk_label(top, "Kiel, DE", &lv_font_montserrat_16, COL_TXT2, 1120, 2);
+    lv_obj_t *top = mk_panel(root, OX, OY, 1256, 44);
+    s_lbl_datetime = mk_label(top, "--:--", &seg_de_16, COL_TXT, 0, 2);
+    mk_label(top, "Kiel, DE", &seg_de_16, COL_TXT2, 1120, 2);
 
     /* AKTUELL */
-    lv_obj_t *cur = mk_panel(root, 0, 66, 470, 300);
-    mk_label(cur, "AKTUELL", &lv_font_montserrat_14, COL_RAIN, 0, 0);
+    lv_obj_t *cur = mk_panel(root, OX, 66 + OY, 470, 300);
+    mk_label(cur, "AKTUELL", &seg_de_14, COL_RAIN, 0, 0);
     s_img_cond  = mk_icon(cur, &wxl_cloud, 306, 14);
     s_lbl_temp  = mk_label(cur, "--°", &lv_font_montserrat_44, COL_TXT, 0, 46);
-    s_lbl_cond  = mk_label(cur, "--", &lv_font_montserrat_24, COL_TXT, 0, 136);
-    s_lbl_feels = mk_label(cur, "Gefuehlt --°", &lv_font_montserrat_16, COL_TXT2, 0, 178);
+    s_lbl_cond  = mk_label(cur, "--", &seg_de_24, COL_TXT, 0, 136);
+    s_lbl_feels = mk_label(cur, "Gefühlt --°", &seg_de_16, COL_TXT2, 0, 178);
     lv_obj_t *chip1 = mk_panel(cur, 0, 208, 214, 58);
     lv_obj_set_style_bg_color(chip1, lv_color_hex(COL_INNER), 0);
     s_lbl_humid = mk_label(chip1, "-- %", &lv_font_montserrat_22, COL_RAIN, 0, 0);
-    mk_label(chip1, "Luftfeuchte", &lv_font_montserrat_12, COL_TXT2, 0, 30);
+    mk_label(chip1, "Luftfeuchte", &seg_de_12, COL_TXT2, 0, 30);
     s_img_compass = mk_icon(cur, CMP[0], 240, 184);
-    mk_label(cur, "Windrichtung", &lv_font_montserrat_12, COL_TXT2, 334, 196);
+    mk_label(cur, "Windrichtung", &seg_de_12, COL_TXT2, 334, 196);
     s_lbl_wdir = mk_label(cur, "--", &lv_font_montserrat_24, COL_AMBER, 334, 214);
 
-    /* HEUTE - STUENDLICH */
-    lv_obj_t *hr = mk_panel(root, 480, 66, 776, 300);
-    mk_label(hr, "HEUTE - STUENDLICH", &lv_font_montserrat_14, COL_TXT2, 0, 0);
+    /* HEUTE - STÜNDLICH */
+    lv_obj_t *hr = mk_panel(root, 480 + OX, 66 + OY, 776, 300);
+    mk_label(hr, "HEUTE · STÜNDLICH", &seg_de_14, COL_TXT2, 0, 0);
     lv_obj_t *hrow = mk_flexrow(hr, 0, 30, 752, 244);
     for (int i = 0; i < 8; i++) {
         lv_obj_t *cell = mk_cell(hrow, 82, 240);
         s_hour_cell[i] = cell;
-        s_lbl_hour[i]  = mk_flabel(cell, "--", &lv_font_montserrat_16, COL_TXT2);
+        s_lbl_hour[i]  = mk_flabel(cell, "--:--", &lv_font_montserrat_16, COL_TXT2);
         s_img_hour[i]  = mk_ficon(cell, &wxs_cloud);
         s_lbl_htemp[i] = mk_flabel(cell, "--°", &lv_font_montserrat_22, COL_TXT);
-        s_lbl_hrain[i] = mk_flabel(cell, " ", &lv_font_montserrat_14, COL_RAIN);
+        s_lbl_hrain[i] = mk_rain(cell, &lv_font_montserrat_14);
     }
 
     /* Metriken */
     const char *mt[4] = {"WIND", "REGEN", "UV-INDEX", "HELLIGKEIT"};
     int mx[4] = {0, 316, 632, 948};
     for (int i = 0; i < 4; i++) {
-        lv_obj_t *m = mk_panel(root, mx[i], 376, 306, 150);
-        mk_label(m, mt[i], &lv_font_montserrat_14, COL_AMBER, 0, 0);
+        lv_obj_t *m = mk_panel(root, mx[i] + OX, 376 + OY, 306, 150);
+        mk_label(m, mt[i], &seg_de_14, COL_AMBER, 0, 0);
         s_lbl_metric[i] = mk_label(m, "--", &lv_font_montserrat_30, COL_TXT, 0, 50);
     }
 
     /* 7-TAGE-VORHERSAGE */
-    lv_obj_t *wk = mk_panel(root, 0, 536, 1256, 250);
-    mk_label(wk, "7-TAGE-VORHERSAGE", &lv_font_montserrat_14, COL_TXT2, 0, 0);
+    lv_obj_t *wk = mk_panel(root, OX, 536 + OY, 1256, 250);
+    mk_label(wk, "7-TAGE-VORHERSAGE", &seg_de_14, COL_TXT2, 0, 0);
     lv_obj_t *wrow = mk_flexrow(wk, 0, 30, 1232, 190);
     for (int i = 0; i < 7; i++) {
         lv_obj_t *dc = mk_daycard(wrow, 164, 188);
@@ -419,7 +452,7 @@ bool AppWeather::run(void)
         s_img_day[i]   = mk_ficon(dc, &wxs_cloud);
         s_lbl_dhi[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_28, COL_TXT);
         s_lbl_dlo[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_16, COL_TXT2);
-        s_lbl_drain[i] = mk_flabel(dc, " ", &lv_font_montserrat_14, COL_RAIN);
+        s_lbl_drain[i] = mk_rain(dc, &lv_font_montserrat_14);
     }
 
     lv_obj_add_event_cb(cur, wx_cleanup_cb, LV_EVENT_DELETE, nullptr);
