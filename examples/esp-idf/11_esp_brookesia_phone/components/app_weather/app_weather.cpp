@@ -56,7 +56,7 @@ static const lv_image_dsc_t *CMP[8] = { &wxc_0,&wxc_1,&wxc_2,&wxc_3,&wxc_4,&wxc_
 LV_FONT_DECLARE(seg_de_14); LV_FONT_DECLARE(seg_de_16); LV_FONT_DECLARE(seg_de_20);
 LV_FONT_DECLARE(seg_de_22); LV_FONT_DECLARE(seg_de_24); LV_FONT_DECLARE(seg_de_26);
 LV_FONT_DECLARE(seg_de_28); LV_FONT_DECLARE(seg_de_30); LV_FONT_DECLARE(seg_de_34);
-LV_FONT_DECLARE(seg_de_36); LV_FONT_DECLARE(seg_de_72);
+LV_FONT_DECLARE(seg_de_36); LV_FONT_DECLARE(seg_de_48); LV_FONT_DECLARE(seg_de_72);
 
 #define OX 12   /* horizontale Zentrierung (1256 auf 1280) */
 
@@ -328,6 +328,8 @@ static void wx_update_cb(lv_timer_t *t)
     ha_forecast_t fc;
     if (ha_provider_get_forecast(&fc) && fc.revision != s_fc_rev) {
         s_fc_rev = fc.revision;
+        esp_rom_printf("WX_FC rev=%u h0used=%d hour=%d d0used=%d mday=%d\n",
+                       (unsigned)fc.revision, fc.hourly[0].used, fc.hourly[0].hour, fc.daily[0].used, fc.daily[0].mday);
         char b[16];
         static const char *dwd[7]={"SO","MO","DI","MI","DO","FR","SA"};
 
@@ -438,10 +440,9 @@ bool AppWeather::run(void)
 
     /* ===== Statusleiste ===== */
     lv_obj_t *top = mk_panel(root, OX, 8, 1256, 70);
-    lv_obj_set_style_pad_all(top, 8, 0);
-    s_lbl_time = mk_label(top, "--:--", &seg_de_36, COL_TXT, 0, 10);
-    s_lbl_sec  = mk_label(top, ":--",  &seg_de_22, COL_TXT2, 132, 24);
-    s_lbl_date = mk_label(top, "--",    &seg_de_20, COL_TXT2, 192, 20);
+    lv_obj_set_style_pad_all(top, 6, 0);
+    s_lbl_time = mk_label(top, "--:--", &seg_de_48, COL_TXT, 0, 4);
+    s_lbl_date = mk_label(top, "--",    &seg_de_26, COL_TXT2, 196, 18);
     /* Sensor-Badge */
     lv_obj_t *bd = lv_obj_create(top);
     lv_obj_set_pos(bd, 430, 16); lv_obj_set_size(bd, 176, 34);
@@ -467,9 +468,7 @@ bool AppWeather::run(void)
 
     /* ===== AKTUELL ===== */
     lv_obj_t *cur = mk_panel(root, OX, 86, 470, 298);
-    lv_obj_set_style_bg_color(cur, lv_color_hex(COL_PANEL), 0);
-    lv_obj_set_style_bg_grad_color(cur, lv_color_hex(0x1E4D35), 0);
-    lv_obj_set_style_bg_grad_dir(cur, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_color(cur, lv_color_hex(0x2E6B4A), 0);   /* schlicht: nur Gruen */
     lv_obj_t *ab = lv_obj_create(cur);
     lv_obj_set_pos(ab, 0, 0); lv_obj_set_size(ab, 100, 30);
     lv_obj_set_style_bg_color(ab, lv_color_hex(0x1f6f43), 0);
