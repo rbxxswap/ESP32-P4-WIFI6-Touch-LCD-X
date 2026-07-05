@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_attr.h"
+#include "cJSON.h"
 #include "ha_config.h"
 
 #define TAG            "ha_config"
@@ -189,10 +190,10 @@ static const char *PAGE_HEAD =
 static esp_err_t get_handler(httpd_req_t *req)
 {
     const ha_config_t *c = ha_config_get();
-    char *buf = malloc(6144);
+    char *buf = malloc(8192);
     if (!buf) return ESP_ERR_NO_MEM;
 
-    int n = snprintf(buf, 6144,
+    int n = snprintf(buf, 8192,
         "%s<h1>HA-Display Konfiguration</h1>"
         "<form method=POST action=/save>"
         "<h2>MQTT (lesen)</h2>"
@@ -213,13 +214,25 @@ static esp_err_t get_handler(httpd_req_t *req)
         "<label>Energie <small>id|Label|Einheit;...</small></label><input name=energy_csv value='%s'>"
         "<label>Licht/Schalter <small>id|Label;...</small></label><input name=light_csv value='%s'>"
         "<label>Szenen <small>id|Label;...</small></label><input name=scene_csv value='%s'>"
-        "<button type=submit>Speichern</button></form></body></html>",
+        "<button type=submit>Speichern</button></form>"
+        "<h2>Backup / Restore</h2>"
+        "<p><a style='color:#3BA4FF' href=/backup>Backup herunterladen (JSON)</a></p>"
+        "<label>Backup-Datei einspielen</label>"
+        "<input type=file id=rf accept='.json,application/json'>"
+        "<button type=button onclick='doR()'>Restore</button>"
+        "<p><small>Hinweis: Das Backup enthaelt Token und Passwoerter im Klartext - sicher aufbewahren.</small></p>"
+        "<script>function doR(){var f=document.getElementById('rf').files[0];"
+        "if(!f){alert('Bitte Datei waehlen');return;}var r=new FileReader();"
+        "r.onload=function(){fetch('/restore',{method:'POST',body:r.result})"
+        ".then(function(x){return x.text();}).then(function(t){document.open();document.write(t);document.close();});};"
+        "r.readAsText(f);}</script>"
+        "</body></html>",
         PAGE_HEAD, c->mqtt_host, (unsigned)c->mqtt_port, c->mqtt_user, c->base_topic,
         c->ha_host, (unsigned)c->ha_port, c->ha_ws_url, c->weather_entity, c->bresser_prefix,
         c->temp_entity, c->energy_csv, c->light_csv, c->scene_csv);
 
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, buf, (n > 0 && n < 6144) ? n : HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, buf, (n > 0 && n < 8192) ? n : HTTPD_RESP_USE_STRLEN);
     free(buf);
     return ESP_OK;
 }
@@ -290,6 +303,101 @@ static esp_err_t post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* ----------------------------------------------------------------------- */
+/*  Backup / Restore                                                       */
+/* ----------------------------------------------------------------------- */
+
+static esp_err_t backup_handler(httpd_req_t *req)
+{
+    const ha_config_t *c = ha_config_get();
+    cJSON *j = cJSON_CreateObject();
+    if (!j) return ESP_ERR_NO_MEM;
+    cJSON_AddNumberToObject(j, "version", c->version);
+    cJSON_AddStringToObject(j, "mqtt_host", c->mqtt_host);
+    cJSON_AddNumberToObject(j, "mqtt_port", c->mqtt_port);
+    cJSON_AddStringToObject(j, "mqtt_user", c->mqtt_user);
+    cJSON_AddStringToObject(j, "mqtt_pass", c->mqtt_pass);
+    cJSON_AddStringToObject(j, "base_topic", c->base_topic);
+    cJSON_AddStringToObject(j, "ha_host", c->ha_host);
+    cJSON_AddNumberToObject(j, "ha_port", c->ha_port);
+    cJSON_AddStringToObject(j, "ha_ws_url", c->ha_ws_url);
+    cJSON_AddStringToObject(j, "ha_token", c->ha_token);
+    cJSON_AddStringToObject(j, "weather_entity", c->weather_entity);
+    cJSON_AddStringToObject(j, "bresser_prefix", c->bresser_prefix);
+    cJSON_AddStringToObject(j, "temp_entity", c->temp_entity);
+    cJSON_AddStringToObject(j, "energy_csv", c->energy_csv);
+    cJSON_AddStringToObject(j, "light_csv", c->light_csv);
+    cJSON_AddStringToObject(j, "scene_csv", c->scene_csv);
+    char *out = cJSON_PrintUnformatted(j);
+    cJSON_Delete(j);
+    if (!out) return ESP_ERR_NO_MEM;
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"wetterdisplay-backup.json\"");
+    httpd_resp_sendstr(req, out);
+    cJSON_free(out);
+    return ESP_OK;
+}
+
+static void json_str(const cJSON *j, const char *key, char *dst, size_t sz)
+{
+    cJSON *v = cJSON_GetObjectItem(j, key);
+    if (cJSON_IsString(v) && v->valuestring) { strncpy(dst, v->valuestring, sz - 1); dst[sz - 1] = 0; }
+}
+static void json_u16(const cJSON *j, const char *key, uint16_t *dst)
+{
+    cJSON *v = cJSON_GetObjectItem(j, key);
+    if (cJSON_IsNumber(v)) { int p = (int)v->valuedouble; if (p > 0 && p < 65536) *dst = (uint16_t)p; }
+}
+
+static esp_err_t restore_handler(httpd_req_t *req)
+{
+    int total = req->content_len;
+    if (total <= 0 || total > 6144) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body zu gross/leer"); return ESP_FAIL; }
+    char *body = malloc(total + 1);
+    if (!body) return ESP_ERR_NO_MEM;
+    int received = 0;
+    while (received < total) {
+        int r = httpd_req_recv(req, body + received, total - received);
+        if (r <= 0) { free(body); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "recv"); return ESP_FAIL; }
+        received += r;
+    }
+    body[total] = 0;
+    cJSON *j = cJSON_Parse(body);
+    free(body);
+    if (!j) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Ungueltiges JSON"); return ESP_FAIL; }
+
+    ha_config_t nc = *ha_config_get();
+    json_str(j, "mqtt_host", nc.mqtt_host, sizeof(nc.mqtt_host));
+    json_u16(j, "mqtt_port", &nc.mqtt_port);
+    json_str(j, "mqtt_user", nc.mqtt_user, sizeof(nc.mqtt_user));
+    json_str(j, "mqtt_pass", nc.mqtt_pass, sizeof(nc.mqtt_pass));
+    json_str(j, "base_topic", nc.base_topic, sizeof(nc.base_topic));
+    json_str(j, "ha_host", nc.ha_host, sizeof(nc.ha_host));
+    json_u16(j, "ha_port", &nc.ha_port);
+    json_str(j, "ha_ws_url", nc.ha_ws_url, sizeof(nc.ha_ws_url));
+    json_str(j, "ha_token", nc.ha_token, sizeof(nc.ha_token));
+    json_str(j, "weather_entity", nc.weather_entity, sizeof(nc.weather_entity));
+    json_str(j, "bresser_prefix", nc.bresser_prefix, sizeof(nc.bresser_prefix));
+    json_str(j, "temp_entity", nc.temp_entity, sizeof(nc.temp_entity));
+    json_str(j, "energy_csv", nc.energy_csv, sizeof(nc.energy_csv));
+    json_str(j, "light_csv", nc.light_csv, sizeof(nc.light_csv));
+    json_str(j, "scene_csv", nc.scene_csv, sizeof(nc.scene_csv));
+    cJSON_Delete(j);
+
+    esp_err_t err = ha_config_save(&nc);
+    httpd_resp_set_type(req, "text/html");
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req,
+            "<!doctype html><meta charset=utf-8>"
+            "<body style='font-family:sans-serif;background:#0D1117;color:#fff;padding:24px'>"
+            "<h1>Wiederhergestellt</h1><p>Konfiguration aus Backup uebernommen. Neustart empfohlen.</p>"
+            "<a style='color:#3BA4FF' href=/>Zurueck</a></body>");
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "NVS-Speichern fehlgeschlagen");
+    }
+    return ESP_OK;
+}
+
 esp_err_t ha_config_start_web(void)
 {
     if (s_server) return ESP_OK;   /* idempotent */
@@ -304,10 +412,14 @@ esp_err_t ha_config_start_web(void)
         return err;
     }
 
-    httpd_uri_t uri_get  = { .uri = "/",     .method = HTTP_GET,  .handler = get_handler,  .user_ctx = NULL };
-    httpd_uri_t uri_post = { .uri = "/save", .method = HTTP_POST, .handler = post_handler, .user_ctx = NULL };
+    httpd_uri_t uri_get     = { .uri = "/",        .method = HTTP_GET,  .handler = get_handler,     .user_ctx = NULL };
+    httpd_uri_t uri_post    = { .uri = "/save",    .method = HTTP_POST, .handler = post_handler,    .user_ctx = NULL };
+    httpd_uri_t uri_backup  = { .uri = "/backup",  .method = HTTP_GET,  .handler = backup_handler,  .user_ctx = NULL };
+    httpd_uri_t uri_restore = { .uri = "/restore", .method = HTTP_POST, .handler = restore_handler, .user_ctx = NULL };
     httpd_register_uri_handler(s_server, &uri_get);
     httpd_register_uri_handler(s_server, &uri_post);
+    httpd_register_uri_handler(s_server, &uri_backup);
+    httpd_register_uri_handler(s_server, &uri_restore);
 
     ESP_LOGI(TAG, "Web-Config-Page laeuft auf Port 80");
     return ESP_OK;

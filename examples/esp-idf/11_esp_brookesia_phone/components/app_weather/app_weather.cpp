@@ -328,8 +328,6 @@ static void wx_update_cb(lv_timer_t *t)
     ha_forecast_t fc;
     if (ha_provider_get_forecast(&fc) && fc.revision != s_fc_rev) {
         s_fc_rev = fc.revision;
-        esp_rom_printf("WX_FC rev=%u h0used=%d hour=%d d0used=%d mday=%d\n",
-                       (unsigned)fc.revision, fc.hourly[0].used, fc.hourly[0].hour, fc.daily[0].used, fc.daily[0].mday);
         char b[16];
         static const char *dwd[7]={"SO","MO","DI","MI","DO","FR","SA"};
 

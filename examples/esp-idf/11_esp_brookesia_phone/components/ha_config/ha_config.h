@@ -32,7 +32,7 @@ typedef struct {
     char     mqtt_pass[64];
     char     base_topic[32];     /* mqtt_statestream base_topic, default "ha_display" */
     /* HA REST + WebSocket (Token-Weg) */
-    char     ha_host[64];        /* HA IP/Host fuer REST+WS, z.B. 192.168.1.60 */
+    char     ha_host[64];        /* HA IP/Host fuer REST+WS, z.B. homeassistant.local */
     uint16_t ha_port;            /* default 8123 */
     char     ha_ws_url[96];      /* optional, z.B. ws://192.168.1.10:8123/api/websocket */
     char     ha_token[256];      /* Long-Lived Access Token */
