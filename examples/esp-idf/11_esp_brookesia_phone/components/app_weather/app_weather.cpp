@@ -439,9 +439,9 @@ bool AppWeather::run(void)
     /* ===== Statusleiste ===== */
     lv_obj_t *top = mk_panel(root, OX, 8, 1256, 70);
     lv_obj_set_style_pad_all(top, 8, 0);
-    s_lbl_time = mk_label(top, "--:--", &seg_de_34, COL_TXT, 0, 0);
-    s_lbl_sec  = mk_label(top, ":--",  &seg_de_16, COL_TXT2, 104, 16);
-    s_lbl_date = mk_label(top, "--",    &seg_de_14, COL_TXT2, 2, 40);
+    s_lbl_time = mk_label(top, "--:--", &seg_de_36, COL_TXT, 0, 10);
+    s_lbl_sec  = mk_label(top, ":--",  &seg_de_22, COL_TXT2, 132, 24);
+    s_lbl_date = mk_label(top, "--",    &seg_de_20, COL_TXT2, 192, 20);
     /* Sensor-Badge */
     lv_obj_t *bd = lv_obj_create(top);
     lv_obj_set_pos(bd, 430, 16); lv_obj_set_size(bd, 176, 34);
@@ -467,8 +467,8 @@ bool AppWeather::run(void)
 
     /* ===== AKTUELL ===== */
     lv_obj_t *cur = mk_panel(root, OX, 86, 470, 298);
-    lv_obj_set_style_bg_color(cur, lv_color_hex(COL_SKYTOP), 0);
-    lv_obj_set_style_bg_grad_color(cur, lv_color_hex(COL_SKYBOT), 0);
+    lv_obj_set_style_bg_color(cur, lv_color_hex(COL_PANEL), 0);
+    lv_obj_set_style_bg_grad_color(cur, lv_color_hex(0x1E4D35), 0);
     lv_obj_set_style_bg_grad_dir(cur, LV_GRAD_DIR_VER, 0);
     lv_obj_t *ab = lv_obj_create(cur);
     lv_obj_set_pos(ab, 0, 0); lv_obj_set_size(ab, 100, 30);
@@ -476,20 +476,22 @@ bool AppWeather::run(void)
     lv_obj_set_style_border_width(ab, 0, 0); lv_obj_set_style_radius(ab, 15, 0);
     lv_obj_set_style_pad_all(ab, 0, 0); lv_obj_remove_flag(ab, LV_OBJ_FLAG_SCROLLABLE);
     mk_label(ab, "AKTUELL", &seg_de_14, COL_TXT, 16, 6);
-    s_img_cond = mk_icon(cur, &wxl_cloud, 330, 18);
+    s_img_cond = mk_icon_sc(cur, &wxl_cloud, 286, 8, 343);   /* 112 -> ~150px */
     s_lbl_temp = mk_label(cur, "--°", &seg_de_72, COL_TXT, 28, 24);
     s_lbl_cond = mk_label(cur, "--", &seg_de_30, COL_TXT, 30, 122);
     s_lbl_feels = mk_label(cur, "Gefühlt --°", &seg_de_20, 0xCFD6E2, 30, 164);
-    lv_obj_t *chip1 = mk_panel(cur, 30, 202, 150, 56);
+    lv_obj_t *chip1 = mk_panel(cur, 30, 200, 150, 62);
     lv_obj_set_style_bg_color(chip1, lv_color_hex(COL_INNER), 0); lv_obj_set_style_bg_opa(chip1, 180, 0);
-    mk_icon(chip1, &wxdrop, 0, 4);
-    s_lbl_humid = mk_label(chip1, "--%", &seg_de_26, COL_RAIN, 34, 0);
-    mk_label(chip1, "Luftfeuchte", &seg_de_14, COL_TXT2, 34, 32);
-    lv_obj_t *chip2 = mk_panel(cur, 192, 202, 150, 56);
+    lv_obj_set_style_pad_all(chip1, 8, 0);
+    mk_icon(chip1, &wxdrop, 0, 2);
+    s_lbl_humid = mk_label(chip1, "--%", &seg_de_24, COL_RAIN, 32, 0);
+    mk_label(chip1, "Luftfeuchte", &seg_de_14, COL_TXT2, 32, 28);
+    lv_obj_t *chip2 = mk_panel(cur, 192, 200, 150, 62);
     lv_obj_set_style_bg_color(chip2, lv_color_hex(COL_INNER), 0); lv_obj_set_style_bg_opa(chip2, 180, 0);
-    mk_icon(chip2, &wxthermo, 0, 2);
-    s_lbl_gfeels = mk_label(chip2, "--°", &seg_de_26, COL_TXT, 40, 0);
-    mk_label(chip2, "Gefühlt", &seg_de_14, COL_TXT2, 40, 32);
+    lv_obj_set_style_pad_all(chip2, 8, 0);
+    mk_icon(chip2, &wxthermo, 0, 0);
+    s_lbl_gfeels = mk_label(chip2, "--°", &seg_de_24, COL_TXT, 38, 0);
+    mk_label(chip2, "Gefühlt", &seg_de_14, COL_TXT2, 38, 28);
 
     /* ===== HEUTE STUENDLICH ===== */
     lv_obj_t *hr = mk_panel(root, 492, 86, 776, 298);
