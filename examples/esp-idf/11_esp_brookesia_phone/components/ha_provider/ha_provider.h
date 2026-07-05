@@ -57,6 +57,8 @@ typedef struct {
     bool  used;
     int   hour;         /* lokale Stunde 0-23 */
     float temp;
+    char  cond[20];     /* condition-Code der Stunde, z.B. "rainy" */
+    int   rain_pct;     /* precipitation_probability 0-100, -1 = unbekannt */
 } ha_hourly_t;
 
 typedef struct {
@@ -64,6 +66,8 @@ typedef struct {
     int   wday;         /* 0=So .. 6=Sa (lokal) */
     float hi;
     float lo;
+    char  cond[20];     /* condition-Code des Tages */
+    int   rain_pct;     /* precipitation_probability 0-100, -1 = unbekannt */
 } ha_daily_t;
 
 typedef struct {

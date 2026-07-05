@@ -201,17 +201,25 @@ static bool fetch_forecast_type(const char *type, ha_forecast_t *fc, bool hourly
                         if (idx >= maxn) break;
                         cJSON *dt = cJSON_GetObjectItem(it, "datetime");
                         cJSON *tp = cJSON_GetObjectItem(it, "temperature");
+                        cJSON *cd = cJSON_GetObjectItem(it, "condition");
+                        cJSON *pp = cJSON_GetObjectItem(it, "precipitation_probability");
                         time_t ep = cJSON_IsString(dt) ? parse_iso_utc(dt->valuestring) : 0;
                         struct tm lt; localtime_r(&ep, &lt);
+                        const char *cs = (cJSON_IsString(cd) && cd->valuestring) ? cd->valuestring : "";
+                        int rp = cJSON_IsNumber(pp) ? (int)(pp->valuedouble + 0.5) : -1;
                         if (hourly) {
                             fc->hourly[idx].hour = lt.tm_hour;
                             fc->hourly[idx].temp = cJSON_IsNumber(tp) ? (float)tp->valuedouble : 0;
+                            snprintf(fc->hourly[idx].cond, sizeof(fc->hourly[idx].cond), "%s", cs);
+                            fc->hourly[idx].rain_pct = rp;
                             fc->hourly[idx].used = true;
                         } else {
                             cJSON *tl = cJSON_GetObjectItem(it, "templow");
                             fc->daily[idx].wday = lt.tm_wday;
                             fc->daily[idx].hi = cJSON_IsNumber(tp) ? (float)tp->valuedouble : 0;
                             fc->daily[idx].lo = cJSON_IsNumber(tl) ? (float)tl->valuedouble : 0;
+                            snprintf(fc->daily[idx].cond, sizeof(fc->daily[idx].cond), "%s", cs);
+                            fc->daily[idx].rain_pct = rp;
                             fc->daily[idx].used = true;
                         }
                         idx++;
