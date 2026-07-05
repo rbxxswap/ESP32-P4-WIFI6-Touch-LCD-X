@@ -1,8 +1,8 @@
 /*
  * Wetter-App - Implementation (Brookesia 0.5 / LVGL v9)
- * Vollstaendige Vorlage: AKTUELL (Icon/Temp/Gefuehlt/Wind/Feuchte),
- * stuendliche Reihe (Icon+Stunde+Temp+Regen%), 7-Tage (Icon+Tag+Hoch/Tief+Regen%).
- * Live-Daten aus ha_provider (REST/Token). Icons: bestehende wicon_* skaliert.
+ * Scharfe Native-Icons (wxs/wxl), Bild-Kompass (wxc_0..7),
+ * Reihen als LVGL-Flexbox (gleichmaessige, symmetrische Verteilung).
+ * Live-Daten aus ha_provider (REST/Token).
  */
 #include "lvgl.h"
 #include "esp_brookesia.hpp"
@@ -35,12 +35,18 @@ using namespace esp_brookesia::gui;
 using namespace esp_brookesia::systems;
 
 LV_IMG_DECLARE(app_weather_icon_112_112);
-LV_IMG_DECLARE(wicon_sun);
-LV_IMG_DECLARE(wicon_moon);
-LV_IMG_DECLARE(wicon_partly);
-LV_IMG_DECLARE(wicon_cloud);
-LV_IMG_DECLARE(wicon_rain);
-LV_IMG_DECLARE(wicon_storm);
+LV_IMG_DECLARE(wxs_sun);  LV_IMG_DECLARE(wxl_sun);
+LV_IMG_DECLARE(wxs_moon); LV_IMG_DECLARE(wxl_moon);
+LV_IMG_DECLARE(wxs_partly); LV_IMG_DECLARE(wxl_partly);
+LV_IMG_DECLARE(wxs_cloud); LV_IMG_DECLARE(wxl_cloud);
+LV_IMG_DECLARE(wxs_rain); LV_IMG_DECLARE(wxl_rain);
+LV_IMG_DECLARE(wxs_storm); LV_IMG_DECLARE(wxl_storm);
+LV_IMG_DECLARE(wxc_0); LV_IMG_DECLARE(wxc_1); LV_IMG_DECLARE(wxc_2); LV_IMG_DECLARE(wxc_3);
+LV_IMG_DECLARE(wxc_4); LV_IMG_DECLARE(wxc_5); LV_IMG_DECLARE(wxc_6); LV_IMG_DECLARE(wxc_7);
+
+static const lv_image_dsc_t *CMP[8] = {
+    &wxc_0, &wxc_1, &wxc_2, &wxc_3, &wxc_4, &wxc_5, &wxc_6, &wxc_7
+};
 
 namespace esp_brookesia::apps {
 
@@ -89,18 +95,81 @@ static lv_obj_t *mk_label(lv_obj_t *parent, const char *txt, const lv_font_t *fo
     return l;
 }
 
-/* zentriertes Label mit fester Breite (fuer saubere Spalten/Kacheln) */
-static lv_obj_t *mk_clabel(lv_obj_t *parent, const char *txt, const lv_font_t *font,
-                           uint32_t color, int x, int y, int w)
+/* Flex-Label: kein set_pos (Flex positioniert selbst) */
+static lv_obj_t *mk_flabel(lv_obj_t *parent, const char *txt, const lv_font_t *font, uint32_t color)
 {
     lv_obj_t *l = lv_label_create(parent);
     lv_label_set_text(l, txt);
     lv_obj_set_style_text_font(l, font, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
-    lv_obj_set_width(l, w);
-    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(l, x, y);
     return l;
+}
+
+/* Icon in nativer Groesse (kein Skalieren) an fixer Position */
+static lv_obj_t *mk_icon(lv_obj_t *parent, const lv_image_dsc_t *src, int x, int y)
+{
+    lv_obj_t *img = lv_image_create(parent);
+    lv_image_set_src(img, src);
+    lv_obj_set_pos(img, x, y);
+    return img;
+}
+
+/* Flex-Icon (fuer Zellen) */
+static lv_obj_t *mk_ficon(lv_obj_t *parent, const lv_image_dsc_t *src)
+{
+    lv_obj_t *img = lv_image_create(parent);
+    lv_image_set_src(img, src);
+    return img;
+}
+
+/* Flex-Row-Container: verteilt Kinder gleichmaessig (symmetrisch) */
+static lv_obj_t *mk_flexrow(lv_obj_t *parent, int x, int y, int w, int h)
+{
+    lv_obj_t *r = lv_obj_create(parent);
+    lv_obj_set_pos(r, x, y);
+    lv_obj_set_size(r, w, h);
+    lv_obj_set_style_bg_opa(r, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(r, 0, 0);
+    lv_obj_set_style_pad_all(r, 0, 0);
+    lv_obj_set_scrollbar_mode(r, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    return r;
+}
+
+/* transparente Spalten-Zelle (stuendlich) */
+static lv_obj_t *mk_cell(lv_obj_t *parent, int w, int h)
+{
+    lv_obj_t *c = lv_obj_create(parent);
+    lv_obj_set_size(c, w, h);
+    lv_obj_set_style_bg_opa(c, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(c, 0, 0);
+    lv_obj_set_style_pad_all(c, 0, 0);
+    lv_obj_set_style_pad_row(c, 5, 0);
+    lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(c, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(c, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    return c;
+}
+
+/* Tages-Kachel (7-Tage) */
+static lv_obj_t *mk_daycard(lv_obj_t *parent, int w, int h)
+{
+    lv_obj_t *c = lv_obj_create(parent);
+    lv_obj_set_size(c, w, h);
+    lv_obj_set_style_bg_color(c, lv_color_hex(COL_INNER), 0);
+    lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(c, 0, 0);
+    lv_obj_set_style_radius(c, 12, 0);
+    lv_obj_set_style_pad_all(c, 8, 0);
+    lv_obj_set_style_pad_row(c, 4, 0);
+    lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(c, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(c, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    return c;
 }
 
 /* ---- Live-Daten aus ha_provider ---- */
@@ -108,11 +177,13 @@ static lv_obj_t   *s_lbl_temp   = nullptr;
 static lv_obj_t   *s_lbl_cond   = nullptr;
 static lv_obj_t   *s_lbl_feels  = nullptr;
 static lv_obj_t   *s_lbl_humid  = nullptr;
-static lv_obj_t   *s_lbl_wdir   = nullptr;   /* Windrichtung (AKTUELL) */
-static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr }; /* WIND, REGEN, UV, HELLIGKEIT */
+static lv_obj_t   *s_lbl_wdir   = nullptr;
+static lv_obj_t   *s_img_compass = nullptr;
+static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr };
 static lv_obj_t   *s_lbl_datetime = nullptr;
 static lv_obj_t   *s_img_cond   = nullptr;
 /* stuendliche Reihe */
+static lv_obj_t   *s_hour_cell[8] = {0};
 static lv_obj_t   *s_img_hour[8]  = {0};
 static lv_obj_t   *s_lbl_hour[8]  = {0};
 static lv_obj_t   *s_lbl_htemp[8] = {0};
@@ -128,11 +199,6 @@ static uint32_t    s_fc_rev    = 0;
 static lv_timer_t *s_wx_timer  = nullptr;
 static uint32_t    s_last_rev  = 0;
 
-#define DAY_CARD_W  164
-#define DAY_GAP     12
-#define WK_CONTENT  1232   /* wk-Panel Innenbreite (1256 - 2*12 pad) */
-
-/* HA-weather-state -> deutscher Kurztext */
 static const char *cond_to_de(const char *c)
 {
     if (!c || !c[0]) return "--";
@@ -149,55 +215,54 @@ static const char *cond_to_de(const char *c)
     return c;
 }
 
-/* HA-weather-state -> Icon-Asset (144x144, wird skaliert dargestellt) */
-static const lv_image_dsc_t *cond_to_icon(const char *c)
+static const lv_image_dsc_t *icon_sm(const char *c)
 {
-    if (!c || !c[0])                                              return &wicon_cloud;
-    if (!strcmp(c, "sunny"))                                      return &wicon_sun;
-    if (!strcmp(c, "clear-night"))                                return &wicon_moon;
-    if (!strcmp(c, "partlycloudy"))                               return &wicon_partly;
-    if (!strcmp(c, "rainy") || !strcmp(c, "pouring"))             return &wicon_rain;
-    if (!strcmp(c, "lightning") || !strcmp(c, "lightning-rainy")) return &wicon_storm;
-    return &wicon_cloud;
+    if (!c || !c[0])                                              return &wxs_cloud;
+    if (!strcmp(c, "sunny"))                                      return &wxs_sun;
+    if (!strcmp(c, "clear-night"))                                return &wxs_moon;
+    if (!strcmp(c, "partlycloudy"))                               return &wxs_partly;
+    if (!strcmp(c, "rainy") || !strcmp(c, "pouring"))             return &wxs_rain;
+    if (!strcmp(c, "lightning") || !strcmp(c, "lightning-rainy")) return &wxs_storm;
+    return &wxs_cloud;
 }
 
-/* Icon skaliert setzen: scale256 = 256 -> 100%, Pivot links-oben, damit x/y fix bleibt */
-static lv_obj_t *mk_icon(lv_obj_t *parent, const lv_image_dsc_t *src, int x, int y, int scale256)
+static const lv_image_dsc_t *icon_lg(const char *c)
 {
-    lv_obj_t *img = lv_image_create(parent);
-    lv_image_set_src(img, src);
-    lv_image_set_pivot(img, 0, 0);
-    lv_image_set_scale(img, scale256);
-    lv_image_set_antialias(img, true);
-    lv_obj_set_pos(img, x, y);
-    return img;
+    if (!c || !c[0])                                              return &wxl_cloud;
+    if (!strcmp(c, "sunny"))                                      return &wxl_sun;
+    if (!strcmp(c, "clear-night"))                                return &wxl_moon;
+    if (!strcmp(c, "partlycloudy"))                               return &wxl_partly;
+    if (!strcmp(c, "rainy") || !strcmp(c, "pouring"))             return &wxl_rain;
+    if (!strcmp(c, "lightning") || !strcmp(c, "lightning-rainy")) return &wxl_storm;
+    return &wxl_cloud;
 }
 
-/* Australian Apparent Temperature (Gefuehlt) */
 static float feels_like(const ha_weather_t &w)
 {
     if (!w.has_temperature) return 0;
     float T  = w.temperature;
-    float ws = w.has_wind ? w.wind_speed / 3.6f : 0.0f;   /* km/h -> m/s */
+    float ws = w.has_wind ? w.wind_speed / 3.6f : 0.0f;
     float rh = w.has_humidity ? w.humidity : 50.0f;
     float e  = rh / 100.0f * 6.105f * expf(17.27f * T / (237.7f + T));
     return T + 0.33f * e - 0.70f * ws - 4.0f;
 }
 
-/* Windrichtung Grad -> 8-Punkt-Kompass */
+static int dir_idx(int deg)
+{
+    int i = ((deg + 22) / 45) % 8;
+    if (i < 0) i += 8;
+    return i;
+}
+
 static const char *dir8(int deg)
 {
     static const char *d[8] = {"N", "NO", "O", "SO", "S", "SW", "W", "NW"};
-    int i = ((deg + 22) / 45) % 8;
-    if (i < 0) i += 8;
-    return d[i];
+    return d[dir_idx(deg)];
 }
 
-/* Poll-Timer: uebernimmt neue Werte aus ha_provider in die Labels */
 static void wx_update_cb(lv_timer_t *t)
 {
     (void)t;
-    /* Uhr + Datum immer aktualisieren */
     if (s_lbl_datetime) {
         time_t now; struct tm tmv;
         time(&now); localtime_r(&now, &tmv);
@@ -211,49 +276,40 @@ static void wx_update_cb(lv_timer_t *t)
         lv_label_set_text(s_lbl_datetime, db);
     }
 
-    /* Forecast (eigene Revision) */
     ha_forecast_t fc;
     if (ha_provider_get_forecast(&fc) && fc.revision != s_fc_rev) {
         s_fc_rev = fc.revision;
         char fb[16];
         static const char *dwd[7] = {"SO", "MO", "DI", "MI", "DO", "FR", "SA"};
 
-        /* --- stuendliche Reihe --- */
         for (int i = 0; i < 8; i++) {
-            if (!fc.hourly[i].used) continue;
-            if (s_lbl_hour[i])  { snprintf(fb, sizeof(fb), "%02d", fc.hourly[i].hour); lv_label_set_text(s_lbl_hour[i], fb); }
-            if (s_img_hour[i])  lv_image_set_src(s_img_hour[i], cond_to_icon(fc.hourly[i].cond));
-            if (s_lbl_htemp[i]) { snprintf(fb, sizeof(fb), "%.0f°", fc.hourly[i].temp); lv_label_set_text(s_lbl_htemp[i], fb); }
-            if (s_lbl_hrain[i]) {
-                if (fc.hourly[i].rain_pct >= 0) { snprintf(fb, sizeof(fb), "%d%%", fc.hourly[i].rain_pct); lv_label_set_text(s_lbl_hrain[i], fb); }
-                else lv_label_set_text(s_lbl_hrain[i], "");
+            if (fc.hourly[i].used) {
+                if (s_hour_cell[i]) lv_obj_remove_flag(s_hour_cell[i], LV_OBJ_FLAG_HIDDEN);
+                if (s_lbl_hour[i])  { snprintf(fb, sizeof(fb), "%02d", fc.hourly[i].hour); lv_label_set_text(s_lbl_hour[i], fb); }
+                if (s_img_hour[i])  lv_image_set_src(s_img_hour[i], icon_sm(fc.hourly[i].cond));
+                if (s_lbl_htemp[i]) { snprintf(fb, sizeof(fb), "%.0f°", fc.hourly[i].temp); lv_label_set_text(s_lbl_htemp[i], fb); }
+                if (s_lbl_hrain[i]) {
+                    if (fc.hourly[i].rain_pct >= 0) { snprintf(fb, sizeof(fb), "%d%%", fc.hourly[i].rain_pct); lv_label_set_text(s_lbl_hrain[i], fb); }
+                    else lv_label_set_text(s_lbl_hrain[i], " ");
+                }
+            } else if (s_hour_cell[i]) {
+                lv_obj_add_flag(s_hour_cell[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
 
-        /* --- 7-Tage: vorhandene Tage zaehlen, mittig anordnen, Rest verstecken --- */
-        int nday = 0;
-        for (int i = 0; i < 7; i++) if (fc.daily[i].used) nday++;
-        if (nday > 0) {
-            int total = nday * DAY_CARD_W + (nday - 1) * DAY_GAP;
-            int startx = (WK_CONTENT - total) / 2;
-            if (startx < 0) startx = 0;
-            int slot = 0;
-            for (int i = 0; i < 7; i++) {
-                if (fc.daily[i].used && s_day_card[i]) {
-                    lv_obj_set_x(s_day_card[i], startx + slot * (DAY_CARD_W + DAY_GAP));
-                    lv_obj_remove_flag(s_day_card[i], LV_OBJ_FLAG_HIDDEN);
-                    if (s_lbl_dwd[i])   lv_label_set_text(s_lbl_dwd[i], dwd[fc.daily[i].wday % 7]);
-                    if (s_img_day[i])   lv_image_set_src(s_img_day[i], cond_to_icon(fc.daily[i].cond));
-                    if (s_lbl_dhi[i])   { snprintf(fb, sizeof(fb), "%.0f°", fc.daily[i].hi); lv_label_set_text(s_lbl_dhi[i], fb); }
-                    if (s_lbl_dlo[i])   { snprintf(fb, sizeof(fb), "%.0f°", fc.daily[i].lo); lv_label_set_text(s_lbl_dlo[i], fb); }
-                    if (s_lbl_drain[i]) {
-                        if (fc.daily[i].rain_pct >= 0) { snprintf(fb, sizeof(fb), "%d%%", fc.daily[i].rain_pct); lv_label_set_text(s_lbl_drain[i], fb); }
-                        else lv_label_set_text(s_lbl_drain[i], "");
-                    }
-                    slot++;
-                } else if (s_day_card[i]) {
-                    lv_obj_add_flag(s_day_card[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 7; i++) {
+            if (fc.daily[i].used) {
+                if (s_day_card[i]) lv_obj_remove_flag(s_day_card[i], LV_OBJ_FLAG_HIDDEN);
+                if (s_lbl_dwd[i])   lv_label_set_text(s_lbl_dwd[i], dwd[fc.daily[i].wday % 7]);
+                if (s_img_day[i])   lv_image_set_src(s_img_day[i], icon_sm(fc.daily[i].cond));
+                if (s_lbl_dhi[i])   { snprintf(fb, sizeof(fb), "%.0f°", fc.daily[i].hi); lv_label_set_text(s_lbl_dhi[i], fb); }
+                if (s_lbl_dlo[i])   { snprintf(fb, sizeof(fb), "%.0f°", fc.daily[i].lo); lv_label_set_text(s_lbl_dlo[i], fb); }
+                if (s_lbl_drain[i]) {
+                    if (fc.daily[i].rain_pct >= 0) { snprintf(fb, sizeof(fb), "%d%%", fc.daily[i].rain_pct); lv_label_set_text(s_lbl_drain[i], fb); }
+                    else lv_label_set_text(s_lbl_drain[i], " ");
                 }
+            } else if (s_day_card[i]) {
+                lv_obj_add_flag(s_day_card[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
     }
@@ -268,12 +324,8 @@ static void wx_update_cb(lv_timer_t *t)
         snprintf(buf, sizeof(buf), "%.1f°", w.temperature);
         lv_label_set_text(s_lbl_temp, buf);
     }
-    if (s_lbl_cond && w.condition[0]) {
-        lv_label_set_text(s_lbl_cond, cond_to_de(w.condition));
-    }
-    if (s_img_cond && w.condition[0]) {
-        lv_image_set_src(s_img_cond, cond_to_icon(w.condition));
-    }
+    if (s_lbl_cond && w.condition[0]) lv_label_set_text(s_lbl_cond, cond_to_de(w.condition));
+    if (s_img_cond && w.condition[0]) lv_image_set_src(s_img_cond, icon_lg(w.condition));
     if (s_lbl_feels && w.has_temperature) {
         snprintf(buf, sizeof(buf), "Gefuehlt %.0f°", feels_like(w));
         lv_label_set_text(s_lbl_feels, buf);
@@ -282,91 +334,72 @@ static void wx_update_cb(lv_timer_t *t)
         snprintf(buf, sizeof(buf), "%.0f %%", w.humidity);
         lv_label_set_text(s_lbl_humid, buf);
     }
-    if (w.has_dir && s_lbl_wdir) {
-        snprintf(buf, sizeof(buf), "%s", dir8(w.wind_dir));
-        lv_label_set_text(s_lbl_wdir, buf);
+    if (w.has_dir) {
+        if (s_img_compass) lv_image_set_src(s_img_compass, CMP[dir_idx(w.wind_dir)]);
+        if (s_lbl_wdir)    lv_label_set_text(s_lbl_wdir, dir8(w.wind_dir));
     }
-    if (w.has_wind && s_lbl_metric[0]) {
-        snprintf(buf, sizeof(buf), "%.1f km/h", w.wind_speed);
-        lv_label_set_text(s_lbl_metric[0], buf);
-    }
-    if (w.has_rain && s_lbl_metric[1]) {
-        snprintf(buf, sizeof(buf), "%.1f mm/h", w.rain_rate);
-        lv_label_set_text(s_lbl_metric[1], buf);
-    }
-    if (w.has_uv && s_lbl_metric[2]) {
-        snprintf(buf, sizeof(buf), "%.1f", w.uv);
-        lv_label_set_text(s_lbl_metric[2], buf);
-    }
-    if (w.has_light && s_lbl_metric[3]) {
-        snprintf(buf, sizeof(buf), "%.0f klx", w.light_lx / 1000.0f);
-        lv_label_set_text(s_lbl_metric[3], buf);
-    }
+    if (w.has_wind && s_lbl_metric[0]) { snprintf(buf, sizeof(buf), "%.1f km/h", w.wind_speed); lv_label_set_text(s_lbl_metric[0], buf); }
+    if (w.has_rain && s_lbl_metric[1]) { snprintf(buf, sizeof(buf), "%.1f mm/h", w.rain_rate);  lv_label_set_text(s_lbl_metric[1], buf); }
+    if (w.has_uv   && s_lbl_metric[2]) { snprintf(buf, sizeof(buf), "%.1f", w.uv);              lv_label_set_text(s_lbl_metric[2], buf); }
+    if (w.has_light&& s_lbl_metric[3]) { snprintf(buf, sizeof(buf), "%.0f klx", w.light_lx/1000.0f); lv_label_set_text(s_lbl_metric[3], buf); }
 }
 
 static void wx_reset_handles(void)
 {
     if (s_wx_timer) { lv_timer_delete(s_wx_timer); s_wx_timer = nullptr; }
     s_lbl_temp = s_lbl_cond = s_lbl_feels = s_lbl_humid = s_lbl_wdir = nullptr;
-    s_lbl_datetime = s_img_cond = nullptr;
+    s_img_compass = s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
-    for (int i = 0; i < 8; i++) { s_img_hour[i] = s_lbl_hour[i] = s_lbl_htemp[i] = s_lbl_hrain[i] = nullptr; }
+    for (int i = 0; i < 8; i++) { s_hour_cell[i] = s_img_hour[i] = s_lbl_hour[i] = s_lbl_htemp[i] = s_lbl_hrain[i] = nullptr; }
     for (int i = 0; i < 7; i++) {
         s_day_card[i] = s_img_day[i] = s_lbl_dwd[i] = nullptr;
         s_lbl_dhi[i] = s_lbl_dlo[i] = s_lbl_drain[i] = nullptr;
     }
 }
 
-/* Feuert beim Zerstoeren der App-Objekte -> Timer sicher entfernen (kein Dangling) */
-static void wx_cleanup_cb(lv_event_t *e)
-{
-    (void)e;
-    wx_reset_handles();
-}
+static void wx_cleanup_cb(lv_event_t *e) { (void)e; wx_reset_handles(); }
 
 bool AppWeather::run(void)
 {
     esp_rom_printf("WX_ENTER run()\n");
-
     lv_obj_t *root = lv_scr_act();
     lv_obj_set_style_bg_color(root, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
 
-    /* ---- Kopfzeile ---- */
+    /* Kopfzeile */
     lv_obj_t *top = mk_panel(root, 0, 0, 1256, 44);
     s_lbl_datetime = mk_label(top, "--:--", &lv_font_montserrat_16, COL_TXT, 0, 2);
     mk_label(top, "Kiel, DE", &lv_font_montserrat_16, COL_TXT2, 1120, 2);
 
-    /* ---- AKTUELL ---- */
+    /* AKTUELL */
     lv_obj_t *cur = mk_panel(root, 0, 66, 470, 300);
     mk_label(cur, "AKTUELL", &lv_font_montserrat_14, COL_RAIN, 0, 0);
-    s_img_cond = mk_icon(cur, &wicon_cloud, 300, 20, 256);   /* grosses Icon (144px) */
-    s_lbl_temp = mk_label(cur, "--°", &lv_font_montserrat_44, COL_TXT, 0, 44);
-    s_lbl_cond = mk_label(cur, "--", &lv_font_montserrat_24, COL_TXT, 0, 134);
-    s_lbl_feels = mk_label(cur, "Gefuehlt --°", &lv_font_montserrat_16, COL_TXT2, 0, 176);
-    /* Chip Luftfeuchte */
-    lv_obj_t *chip1 = mk_panel(cur, 0, 208, 210, 58);
+    s_img_cond  = mk_icon(cur, &wxl_cloud, 306, 14);
+    s_lbl_temp  = mk_label(cur, "--°", &lv_font_montserrat_44, COL_TXT, 0, 46);
+    s_lbl_cond  = mk_label(cur, "--", &lv_font_montserrat_24, COL_TXT, 0, 136);
+    s_lbl_feels = mk_label(cur, "Gefuehlt --°", &lv_font_montserrat_16, COL_TXT2, 0, 178);
+    lv_obj_t *chip1 = mk_panel(cur, 0, 208, 214, 58);
     lv_obj_set_style_bg_color(chip1, lv_color_hex(COL_INNER), 0);
     s_lbl_humid = mk_label(chip1, "-- %", &lv_font_montserrat_22, COL_RAIN, 0, 0);
     mk_label(chip1, "Luftfeuchte", &lv_font_montserrat_12, COL_TXT2, 0, 30);
-    /* Chip Windrichtung */
-    lv_obj_t *chip2 = mk_panel(cur, 226, 208, 210, 58);
-    lv_obj_set_style_bg_color(chip2, lv_color_hex(COL_INNER), 0);
-    s_lbl_wdir = mk_label(chip2, "--", &lv_font_montserrat_22, COL_AMBER, 0, 0);
-    mk_label(chip2, "Windrichtung", &lv_font_montserrat_12, COL_TXT2, 0, 30);
+    s_img_compass = mk_icon(cur, CMP[0], 240, 184);
+    mk_label(cur, "Windrichtung", &lv_font_montserrat_12, COL_TXT2, 334, 196);
+    s_lbl_wdir = mk_label(cur, "--", &lv_font_montserrat_24, COL_AMBER, 334, 214);
 
-    /* ---- HEUTE - STUENDLICH ---- */
+    /* HEUTE - STUENDLICH */
     lv_obj_t *hr = mk_panel(root, 480, 66, 776, 300);
     mk_label(hr, "HEUTE - STUENDLICH", &lv_font_montserrat_14, COL_TXT2, 0, 0);
+    lv_obj_t *hrow = mk_flexrow(hr, 0, 30, 752, 244);
     for (int i = 0; i < 8; i++) {
-        int x = i * 94;
-        s_lbl_hour[i]  = mk_clabel(hr, "--", &lv_font_montserrat_16, COL_TXT2, x + 3, 34, 88);
-        s_img_hour[i]  = mk_icon(hr, &wicon_cloud, x + 22, 62, 90);   /* ~52px */
-        s_lbl_htemp[i] = mk_clabel(hr, "--°", &lv_font_montserrat_24, COL_TXT, x + 3, 122, 88);
-        s_lbl_hrain[i] = mk_clabel(hr, "", &lv_font_montserrat_16, COL_RAIN, x + 3, 158, 88);
+        lv_obj_t *cell = mk_cell(hrow, 82, 240);
+        s_hour_cell[i] = cell;
+        s_lbl_hour[i]  = mk_flabel(cell, "--", &lv_font_montserrat_16, COL_TXT2);
+        s_img_hour[i]  = mk_ficon(cell, &wxs_cloud);
+        s_lbl_htemp[i] = mk_flabel(cell, "--°", &lv_font_montserrat_22, COL_TXT);
+        s_lbl_hrain[i] = mk_flabel(cell, " ", &lv_font_montserrat_14, COL_RAIN);
     }
 
-    /* ---- Metriken ---- */
+    /* Metriken */
     const char *mt[4] = {"WIND", "REGEN", "UV-INDEX", "HELLIGKEIT"};
     int mx[4] = {0, 316, 632, 948};
     for (int i = 0; i < 4; i++) {
@@ -375,29 +408,25 @@ bool AppWeather::run(void)
         s_lbl_metric[i] = mk_label(m, "--", &lv_font_montserrat_30, COL_TXT, 0, 50);
     }
 
-    /* ---- 7-TAGE-VORHERSAGE ---- */
+    /* 7-TAGE-VORHERSAGE */
     lv_obj_t *wk = mk_panel(root, 0, 536, 1256, 250);
-    lv_obj_set_style_pad_all(wk, 12, 0);
     mk_label(wk, "7-TAGE-VORHERSAGE", &lv_font_montserrat_14, COL_TXT2, 0, 0);
+    lv_obj_t *wrow = mk_flexrow(wk, 0, 30, 1232, 190);
     for (int i = 0; i < 7; i++) {
-        int x = 6 + i * (DAY_CARD_W + DAY_GAP);
-        lv_obj_t *dc = mk_panel(wk, x, 30, DAY_CARD_W, 190);
-        lv_obj_set_style_bg_color(dc, lv_color_hex(COL_INNER), 0);
-        lv_obj_set_style_pad_all(dc, 10, 0);
-        s_day_card[i] = dc;
-        s_lbl_dwd[i]  = mk_clabel(dc, "--", &lv_font_montserrat_20, COL_TXT, 0, 0, 144);
-        s_img_day[i]  = mk_icon(dc, &wicon_cloud, 46, 30, 92);   /* ~52px, in 144 zentriert */
-        s_lbl_dhi[i]  = mk_clabel(dc, "--°", &lv_font_montserrat_28, COL_TXT, 0, 90, 144);
-        s_lbl_dlo[i]  = mk_clabel(dc, "--°", &lv_font_montserrat_18, COL_TXT2, 0, 124, 144);
-        s_lbl_drain[i] = mk_clabel(dc, "", &lv_font_montserrat_16, COL_RAIN, 0, 152, 144);
+        lv_obj_t *dc = mk_daycard(wrow, 164, 188);
+        s_day_card[i]  = dc;
+        s_lbl_dwd[i]   = mk_flabel(dc, "--", &lv_font_montserrat_20, COL_TXT);
+        s_img_day[i]   = mk_ficon(dc, &wxs_cloud);
+        s_lbl_dhi[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_28, COL_TXT);
+        s_lbl_dlo[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_16, COL_TXT2);
+        s_lbl_drain[i] = mk_flabel(dc, " ", &lv_font_montserrat_14, COL_RAIN);
     }
 
-    /* Live-Update-Timer starten + Cleanup an Objekt-Lebensdauer koppeln */
     lv_obj_add_event_cb(cur, wx_cleanup_cb, LV_EVENT_DELETE, nullptr);
     s_last_rev = 0;
     s_fc_rev = 0;
     s_wx_timer = lv_timer_create(wx_update_cb, 2000, nullptr);
-    wx_update_cb(nullptr);   /* sofort erster Versuch, falls schon Daten da */
+    wx_update_cb(nullptr);
 
     esp_rom_printf("WX_DONE run() complete\n");
     return true;
