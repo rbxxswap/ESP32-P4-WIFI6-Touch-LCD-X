@@ -120,6 +120,7 @@ static void poll_once(void)
     if (s_bresser[0]) {
         if (fetch_bresser_float("luftfeuchte",  &f)) { w.humidity    = f; w.has_humidity    = true; any = true; }
         if (fetch_bresser_float("wind",         &f)) { w.wind_speed  = f; w.has_wind        = true; any = true; }
+        if (fetch_bresser_float("wind_boe",     &f)) { w.wind_gust   = f; w.has_gust        = true; any = true; }
         if (fetch_bresser_float("regenrate",    &f)) { w.rain_rate   = f; w.has_rain        = true; any = true; }
         if (fetch_bresser_float("uv_index",     &f)) { w.uv          = f; w.has_uv          = true; any = true; }
         if (fetch_bresser_float("beleuchtung",  &f)) { w.light_lx    = f; w.has_light       = true; any = true; }

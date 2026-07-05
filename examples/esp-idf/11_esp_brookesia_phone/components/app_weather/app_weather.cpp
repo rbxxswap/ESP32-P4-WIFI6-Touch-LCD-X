@@ -50,10 +50,17 @@ static const lv_image_dsc_t *CMP[8] = {
 
 LV_IMG_DECLARE(wxdrop);
 /* Segoe-UI-Semibold mit Umlauten (LVGL-Font, via lv_font_conv) */
-LV_FONT_DECLARE(seg_de_12);
 LV_FONT_DECLARE(seg_de_14);
 LV_FONT_DECLARE(seg_de_16);
+LV_FONT_DECLARE(seg_de_20);
+LV_FONT_DECLARE(seg_de_22);
 LV_FONT_DECLARE(seg_de_24);
+LV_FONT_DECLARE(seg_de_26);
+LV_FONT_DECLARE(seg_de_28);
+LV_FONT_DECLARE(seg_de_30);
+LV_FONT_DECLARE(seg_de_34);
+LV_FONT_DECLARE(seg_de_36);
+LV_FONT_DECLARE(seg_de_72);
 
 /* Inhalt (1256 breit) auf 1280x800 zentrieren */
 #define OX 12
@@ -213,6 +220,7 @@ static lv_obj_t   *s_lbl_humid  = nullptr;
 static lv_obj_t   *s_lbl_wdir   = nullptr;
 static lv_obj_t   *s_img_compass = nullptr;
 static lv_obj_t   *s_lbl_metric[4] = { nullptr, nullptr, nullptr, nullptr };
+static lv_obj_t   *s_lbl_gust   = nullptr;   /* Boeen im WIND-Kachel */
 static lv_obj_t   *s_lbl_datetime = nullptr;
 static lv_obj_t   *s_img_cond   = nullptr;
 /* stuendliche Reihe */
@@ -372,6 +380,7 @@ static void wx_update_cb(lv_timer_t *t)
         if (s_lbl_wdir)    lv_label_set_text(s_lbl_wdir, dir8(w.wind_dir));
     }
     if (w.has_wind && s_lbl_metric[0]) { snprintf(buf, sizeof(buf), "%.1f km/h", w.wind_speed); lv_label_set_text(s_lbl_metric[0], buf); }
+    if (w.has_gust && s_lbl_gust)      { snprintf(buf, sizeof(buf), "Böen %.1f", w.wind_gust);  lv_label_set_text(s_lbl_gust, buf); }
     if (w.has_rain && s_lbl_metric[1]) { snprintf(buf, sizeof(buf), "%.1f mm/h", w.rain_rate);  lv_label_set_text(s_lbl_metric[1], buf); }
     if (w.has_uv   && s_lbl_metric[2]) { snprintf(buf, sizeof(buf), "%.1f", w.uv);              lv_label_set_text(s_lbl_metric[2], buf); }
     if (w.has_light&& s_lbl_metric[3]) { snprintf(buf, sizeof(buf), "%.0f klx", w.light_lx/1000.0f); lv_label_set_text(s_lbl_metric[3], buf); }
@@ -383,6 +392,7 @@ static void wx_reset_handles(void)
     s_lbl_temp = s_lbl_cond = s_lbl_feels = s_lbl_humid = s_lbl_wdir = nullptr;
     s_img_compass = s_lbl_datetime = s_img_cond = nullptr;
     for (int i = 0; i < 4; i++) s_lbl_metric[i] = nullptr;
+    s_lbl_gust = nullptr;
     for (int i = 0; i < 8; i++) { s_hour_cell[i] = s_img_hour[i] = s_lbl_hour[i] = s_lbl_htemp[i] = s_lbl_hrain[i] = nullptr; }
     for (int i = 0; i < 7; i++) {
         s_day_card[i] = s_img_day[i] = s_lbl_dwd[i] = nullptr;
@@ -399,60 +409,61 @@ bool AppWeather::run(void)
     lv_obj_set_style_bg_color(root, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
 
-    /* Kopfzeile */
-    lv_obj_t *top = mk_panel(root, OX, OY, 1256, 44);
-    s_lbl_datetime = mk_label(top, "--:--", &seg_de_16, COL_TXT, 0, 2);
-    mk_label(top, "Kiel, DE", &seg_de_16, COL_TXT2, 1120, 2);
+    /* Statusleiste (groesser) */
+    lv_obj_t *top = mk_panel(root, OX, 8, 1256, 56);
+    lv_obj_set_style_pad_all(top, 10, 0);
+    s_lbl_datetime = mk_label(top, "--:--", &seg_de_26, COL_TXT, 0, 3);
+    mk_label(top, "Kiel, DE", &seg_de_22, COL_TXT2, 1108, 5);
 
     /* AKTUELL */
-    lv_obj_t *cur = mk_panel(root, OX, 66 + OY, 470, 300);
-    mk_label(cur, "AKTUELL", &seg_de_14, COL_RAIN, 0, 0);
-    s_img_cond  = mk_icon(cur, &wxl_cloud, 306, 14);
-    s_lbl_temp  = mk_label(cur, "--°", &lv_font_montserrat_44, COL_TXT, 0, 46);
-    s_lbl_cond  = mk_label(cur, "--", &seg_de_24, COL_TXT, 0, 136);
-    s_lbl_feels = mk_label(cur, "Gefühlt --°", &seg_de_16, COL_TXT2, 0, 178);
-    lv_obj_t *chip1 = mk_panel(cur, 0, 208, 214, 58);
+    lv_obj_t *cur = mk_panel(root, OX, 72, 470, 320);
+    mk_label(cur, "AKTUELL", &seg_de_16, COL_RAIN, 0, 0);
+    s_img_cond  = mk_icon(cur, &wxl_cloud, 330, 8);
+    s_lbl_temp  = mk_label(cur, "--°", &seg_de_72, COL_TXT, 0, 26);
+    s_lbl_cond  = mk_label(cur, "--", &seg_de_30, COL_TXT, 0, 120);
+    s_lbl_feels = mk_label(cur, "Gefühlt --°", &seg_de_20, COL_TXT2, 0, 162);
+    lv_obj_t *chip1 = mk_panel(cur, 0, 200, 214, 62);
     lv_obj_set_style_bg_color(chip1, lv_color_hex(COL_INNER), 0);
-    s_lbl_humid = mk_label(chip1, "-- %", &lv_font_montserrat_22, COL_RAIN, 0, 0);
-    mk_label(chip1, "Luftfeuchte", &seg_de_12, COL_TXT2, 0, 30);
-    s_img_compass = mk_icon(cur, CMP[0], 240, 184);
-    mk_label(cur, "Windrichtung", &seg_de_12, COL_TXT2, 334, 196);
-    s_lbl_wdir = mk_label(cur, "--", &lv_font_montserrat_24, COL_AMBER, 334, 214);
+    s_lbl_humid = mk_label(chip1, "-- %", &seg_de_26, COL_RAIN, 0, 0);
+    mk_label(chip1, "Luftfeuchte", &seg_de_14, COL_TXT2, 0, 34);
+    s_img_compass = mk_icon(cur, CMP[0], 244, 186);
+    mk_label(cur, "Windrichtung", &seg_de_14, COL_TXT2, 338, 196);
+    s_lbl_wdir = mk_label(cur, "--", &seg_de_28, COL_AMBER, 338, 214);
 
     /* HEUTE - STÜNDLICH */
-    lv_obj_t *hr = mk_panel(root, 480 + OX, 66 + OY, 776, 300);
-    mk_label(hr, "HEUTE · STÜNDLICH", &seg_de_14, COL_TXT2, 0, 0);
-    lv_obj_t *hrow = mk_flexrow(hr, 0, 30, 752, 244);
+    lv_obj_t *hr = mk_panel(root, 480 + OX, 72, 776, 320);
+    mk_label(hr, "HEUTE · STÜNDLICH", &seg_de_16, COL_TXT2, 0, 0);
+    lv_obj_t *hrow = mk_flexrow(hr, 0, 34, 752, 262);
     for (int i = 0; i < 8; i++) {
-        lv_obj_t *cell = mk_cell(hrow, 82, 240);
+        lv_obj_t *cell = mk_cell(hrow, 84, 262);
         s_hour_cell[i] = cell;
-        s_lbl_hour[i]  = mk_flabel(cell, "--:--", &lv_font_montserrat_16, COL_TXT2);
+        s_lbl_hour[i]  = mk_flabel(cell, "--:--", &seg_de_20, COL_TXT2);
         s_img_hour[i]  = mk_ficon(cell, &wxs_cloud);
-        s_lbl_htemp[i] = mk_flabel(cell, "--°", &lv_font_montserrat_22, COL_TXT);
-        s_lbl_hrain[i] = mk_rain(cell, &lv_font_montserrat_14);
+        s_lbl_htemp[i] = mk_flabel(cell, "--°", &seg_de_30, COL_TXT);
+        s_lbl_hrain[i] = mk_rain(cell, &seg_de_20);
     }
 
-    /* Metriken */
+    /* Metriken (flacher) */
     const char *mt[4] = {"WIND", "REGEN", "UV-INDEX", "HELLIGKEIT"};
     int mx[4] = {0, 316, 632, 948};
     for (int i = 0; i < 4; i++) {
-        lv_obj_t *m = mk_panel(root, mx[i] + OX, 376 + OY, 306, 150);
-        mk_label(m, mt[i], &seg_de_14, COL_AMBER, 0, 0);
-        s_lbl_metric[i] = mk_label(m, "--", &lv_font_montserrat_30, COL_TXT, 0, 50);
+        lv_obj_t *m = mk_panel(root, mx[i] + OX, 400, 306, 116);
+        mk_label(m, mt[i], &seg_de_16, COL_AMBER, 0, 0);
+        s_lbl_metric[i] = mk_label(m, "--", &seg_de_34, COL_TXT, 0, 44);
+        if (i == 0) s_lbl_gust = mk_label(m, "Böen --", &seg_de_16, COL_TXT2, 150, 4);
     }
 
-    /* 7-TAGE-VORHERSAGE */
-    lv_obj_t *wk = mk_panel(root, OX, 536 + OY, 1256, 250);
-    mk_label(wk, "7-TAGE-VORHERSAGE", &seg_de_14, COL_TXT2, 0, 0);
-    lv_obj_t *wrow = mk_flexrow(wk, 0, 30, 1232, 190);
+    /* 7-Tage (ohne Ueberschrift) */
+    lv_obj_t *wk = mk_panel(root, OX, 524, 1256, 268);
+    lv_obj_t *wrow = mk_flexrow(wk, 0, 0, 1232, 244);
     for (int i = 0; i < 7; i++) {
-        lv_obj_t *dc = mk_daycard(wrow, 164, 188);
+        lv_obj_t *dc = mk_daycard(wrow, 168, 244);
         s_day_card[i]  = dc;
-        s_lbl_dwd[i]   = mk_flabel(dc, "--", &lv_font_montserrat_20, COL_TXT);
+        s_lbl_dwd[i]   = mk_flabel(dc, "--", &seg_de_24, COL_TXT);
         s_img_day[i]   = mk_ficon(dc, &wxs_cloud);
-        s_lbl_dhi[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_28, COL_TXT);
-        s_lbl_dlo[i]   = mk_flabel(dc, "--°", &lv_font_montserrat_16, COL_TXT2);
-        s_lbl_drain[i] = mk_rain(dc, &lv_font_montserrat_14);
+        s_lbl_dhi[i]   = mk_flabel(dc, "--°", &seg_de_36, COL_TXT);
+        s_lbl_dlo[i]   = mk_flabel(dc, "--°", &seg_de_22, COL_TXT2);
+        s_lbl_drain[i] = mk_rain(dc, &seg_de_20);
     }
 
     lv_obj_add_event_cb(cur, wx_cleanup_cb, LV_EVENT_DELETE, nullptr);

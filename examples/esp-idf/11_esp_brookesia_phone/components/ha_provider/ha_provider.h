@@ -24,6 +24,7 @@ typedef struct {
     float    temperature;       /* Grad C */
     float    humidity;          /* % */
     float    wind_speed;        /* km/h */
+    float    wind_gust;         /* km/h (Boeen) */
     float    rain_rate;         /* mm/h */
     float    uv;                /* UV-Index */
     float    light_lx;          /* Beleuchtung in Lux */
@@ -31,6 +32,7 @@ typedef struct {
     bool     has_temperature;
     bool     has_humidity;
     bool     has_wind;
+    bool     has_gust;
     bool     has_rain;
     bool     has_uv;
     bool     has_light;
